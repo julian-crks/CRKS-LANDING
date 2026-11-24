@@ -413,6 +413,15 @@ return `<div><h1 style="text-align:center;margin:6px 0 2px">Entrenos</h1><p clas
 <h2>Entrenos recientes</h2>${cards}</div>`;
 };
 window.deletePost=async function(id){if(String(id).startsWith('local-')){if(!confirm('¿Borrar tu entreno guardado en este celular?'))return;let local=JSON.parse(localStorage.getItem('crks_entrenos_local')||'[]').filter(x=>x.id!==id);localStorage.setItem('crks_entrenos_local',JSON.stringify(local));await render();return;}if(!confirm('¿Borrar tu entreno?'))return;try{let r=await sb.from('posts').delete().eq('id',id).eq('user_id',me.id);if(r.error)throw r.error;await render();}catch(e){alert('No se pudo borrar. Error: '+e.message);}};
+
+// --- FIX DEFINITIVO PILLS: CSS más fuerte que .publish-card button ---
+(function(){let st=document.createElement('style');st.id='crks-pills-fix';st.textContent=`
+.publish-card button.sport-pill,.entreno-publish button.sport-pill,#sportPills button.sport-pill{width:auto!important;flex:0 0 auto!important;max-width:none!important;background:#1a1a1a!important;color:#fff!important;border:1px solid #444!important;border-radius:999px!important;padding:8px 14px!important;font-size:13px!important;font-weight:600!important;line-height:1.2!important;box-shadow:none!important}
+.publish-card button.sport-pill.active,.entreno-publish button.sport-pill.active,#sportPills button.sport-pill.active{background:#A6FF00!important;color:#000!important;font-weight:800!important;border-color:#A6FF00!important}
+#sportPills{display:flex!important;flex-wrap:wrap!important;gap:8px!important}
+`;document.head.appendChild(st);})();
+// --- Clic delegado para deportes: funciona aunque onclick falle ---
+document.addEventListener('click',function(e){let b=e.target&&e.target.closest?e.target.closest('.sport-pill'):null;if(!b)return;e.preventDefault();let s=b.dataset.sport||b.textContent.trim();let sel=document.getElementById('ps');if(sel)sel.value=s;document.querySelectorAll('.sport-pill').forEach(x=>x.classList.toggle('active',x===b));let st=document.getElementById('entrenoStatus');if(st)st.textContent='Deporte: '+s;});
 })();
 </script>
 
