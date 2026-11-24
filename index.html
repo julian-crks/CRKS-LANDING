@@ -45,6 +45,18 @@ header button{background:#fff3}small,.m{color:var(--mut)}img{max-width:100%;bord
 @media(max-width:640px){.home-grid{grid-template-columns:1fr}}
 .home-card{background:var(--card);border-radius:8px;padding:14px}
 .home-card img{width:100%;border-radius:6px}
+
+.post-card{background:var(--card);border-radius:12px;padding:14px;margin:0 0 14px;box-shadow:0 2px 10px rgba(0,0,0,.06)}
+.post-top{display:flex;gap:10px;align-items:center}
+.post-avatar{width:44px;height:44px;border-radius:50%;background:#12261f;color:#B4FF00;display:flex;align-items:center;justify-content:center;font:700 1.2rem 'Barlow Condensed',sans-serif;flex-shrink:0;overflow:hidden}
+.post-avatar img{width:100%;height:100%;object-fit:cover}
+.post-name{font-weight:700;line-height:1.1}
+.post-meta{font-size:.85rem;color:var(--mut)}
+.streak-badge{background:#fff3cd;border:1px solid #f2b705;border-radius:999px;padding:2px 9px;font-size:.82rem;font-weight:700;white-space:nowrap}
+.post-stats{display:flex;gap:14px;flex-wrap:wrap;margin:8px 0;font-weight:700}
+.post-stats span{background:#eef4ef;padding:6px 10px;border-radius:999px;font-size:.9rem}
+.miracha{background:#12261f;color:#fff;border-radius:12px;padding:14px;margin:0 0 16px;display:flex;justify-content:space-between;align-items:center;gap:10px}
+.miracha b{color:#B4FF00;font-size:1.3rem}
 </style></head><body><div id="app"></div>
 <script>
 const SB_URL='https://oqyjbradimrzhrcawept.supabase.co',SB_KEY='sb_publishable_f1rIroehbs0PaGBu2DCqkA_MBA4CtLP';
@@ -72,13 +84,13 @@ const img=u=>u?`<img src="${esc(u)}" alt="">`:'';
 
 V.home=async()=>{
  const[{data:ps},{data:ms},{data:pr},{data:ch}]=await Promise.all([
-  sb.from('posts').select('*,profiles(name),likes(user_id),comments(id)').order('created_at',{ascending:false}).limit(5),
+  sb.from('posts').select('*,profiles(name,streak,avatar_url),likes(user_id),comments(id,body,profiles(name))').order('created_at',{ascending:false}).limit(20),
   sb.from('meetups').select('*,profiles(name),meetup_going(user_id)').order('starts_at').limit(3),
   sb.from('products').select('*').order('created_at',{ascending:false}).limit(4),
   sb.from('challenges').select('*').order('created_at',{ascending:false}).limit(3)
  ]);
  return `<div class="landing"><div class="l-hero" style="padding-top:22px"><div class="l-eyebrow">CLUB DEPORTIVO • COLOMBIA</div><h1>NACIMOS<br>PARA<br><span class="green">RENDIR.</span></h1><p>Entrena con tus cracks. Comparte cada kilómetro, acepta retos y cuadra la próxima salida con los Cracks.</p><div class="l-btns"><button class="l-btn-primary" onclick="go('feed')">📷 PUBLICA TU ENTRENO</button><button class="l-btn-ghost" onclick="go('meet')">🤝 ARMA UN ENCUENTRO</button></div></div><div class="l-ticker"><span>PREPÁRATE ⚡ CRKS ⚡ ENTRENA ⚡ COMPARTE ⚡ SUPÉRATE ⚡ CRKS ⚡ ENTRENA ⚡ COMPARTE ⚡ SUPÉRATE ⚡&nbsp;&nbsp;PREPÁRATE ⚡ CRKS ⚡ ENTRENA ⚡ COMPARTE ⚡ SUPÉRATE ⚡ CRKS ⚡ ENTRENA ⚡ COMPARTE ⚡ SUPÉRATE ⚡</span></div></div>
- <div class="home-sec"><h2>🔥 Últimos entrenos</h2>${((ps||[]).map(p=>`<div class="card"><b>${esc(p.profiles?.name||'Crack')}</b> <small>${fd(p.created_at)} · ${esc(p.sport||'')} · ${+p.km} km · ${p.minutes} min</small><p>${esc(p.body)}</p>${img(p.image_url)}<div class="row"><span>❤️ ${p.likes.length} · 💬 ${p.comments.length}</span></div></div>`).join('')||'<p class=m>Aún no hay entrenos. Publica el primero.</p>')}<button class=g onclick="go('feed')">Ver todos los entrenos →</button>
+ <div class="home-sec"><div class="miracha"><div><div style="opacity:.8">TU RACHA</div><b>🔥 ${prof?.streak||0} días</b> <small>· Récord ${prof?.best_streak||0}</small></div><button class="l-btn-primary" onclick="go('feed')">+ Publicar</button></div><h2>🔥 Entrenos de los Cracks</h2>${((ps||[]).map(p=>{const nm=esc(p.profiles?.name||'Crack');const ini=nm.charAt(0).toUpperCase();const av=p.profiles?.avatar_url?`<img src="${esc(p.profiles.avatar_url)}">`:ini;const lk=p.likes.some(x=>x.user_id==me.id);return `<div class="post-card"><div class="post-top"><div class="post-avatar">${av}</div><div style="flex:1"><div class="post-name">${nm}</div><div class="post-meta">${fd(p.created_at)} · ${esc(p.sport||'')}</div></div><span class="streak-badge">🔥 ${p.profiles?.streak||0} días</span></div><p>${esc(p.body)}</p>${img(p.image_url)}<div class="post-stats"><span>🏃 ${+p.km} km</span><span>⏱️ ${p.minutes} min</span><span>⚡ ${(p.km>0&&p.minutes>0)?(p.minutes/p.km).toFixed(1)+' min/km':''}</span></div><div class="row"><button class=g onclick="like('${p.id}',${lk})">${lk?'❤️':'🤍'} ${p.likes.length}</button><button class=g onclick="cmt('${p.id}')">💬 ${p.comments.length}</button>${p.user_id==me.id||isAdmin?`<button class=g onclick="del('posts','${p.id}')">Borrar</button>`:''}</div>${p.comments.map(c=>`<small><b>${esc(c.profiles?.name)}:</b> ${esc(c.body)}</small><br>`).join('')}</div>`}).join('')||'<p class=m>Aún no hay entrenos. Publica el primero.</p>')}<button class=g onclick="go('feed')">Publicar / Ver todo →</button>
  <h2>🤝 Próximos encuentros</h2>${((ms||[]).map(m=>`<div class="card"><h3>${esc(m.title)}</h3><div class=m>${esc(m.place)} · ${fd(m.starts_at)} · por ${esc(m.profiles?.name||'')}</div><div class=m>Van ${m.meetup_going.length} cracks</div></div>`).join('')||'<p class=m>No hay encuentros programados.</p>')}<button class=g onclick="go('meet')">Ver encuentros →</button>
  <h2>🏆 Retos</h2>${((ch||[]).map(r=>`<div class="card">${img(r.cover_url)}<h3>${esc(r.title)}</h3><p>${esc(r.description)}</p><div class=m>Meta: ${+r.goal_km} km</div></div>`).join('')||'<p class=m>No hay retos activos.</p>')}<button class=g onclick="go('retos')">Ver retos →</button>
  <h2>🛍️ Merch / Tienda</h2><div class="home-grid">${((pr||[]).filter(r=>r.active!==false).map(r=>`<div class="home-card">${img(r.image_url)}<h3>${esc(r.name)}</h3><p>${esc(r.description)}</p><b>${esc(r.price)}</b></div>`).join('')||'<p class=m>Pronto más merch CRKS.</p>')}</div><br><button class=g onclick="go('tienda')">Ver tienda →</button></div>`;
