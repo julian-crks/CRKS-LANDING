@@ -448,7 +448,46 @@ return `<div><h1 style="text-align:center;margin:6px 0 2px">Entrenos</h1><p clas
 <button class="l-btn-primary" style="width:100%;padding:15px;margin-top:10px" type="button" id="btnPublicarEntreno" onclick="post()">Publicar entreno</button><small class=m>La foto se comprime a 800px para que cargue liviano.</small></div>
 <h2>Entrenos recientes</h2>${cards}</div>`;
 };
-window.deletePost=async function(id){if(String(id).startsWith('local-')){if(!confirm('¿Borrar tu entreno guardado en este celular?'))return;let local=JSON.parse(localStorage.getItem('crks_entrenos_local')||'[]').filter(x=>x.id!==id);localStorage.setItem('crks_entrenos_local',JSON.stringify(local));await render();return;}if(!confirm('¿Borrar tu entreno?'))return;try{let r=await sb.from('posts').delete().eq('id',id).eq('user_id',me.id);if(r.error)throw r.error;await render();}catch(e){alert('No se pudo borrar. Error: '+e.message);}};
+window.deletePost=async function(id){
+  if(!confirm('¿Borrar tu entreno?')) return;
+  var postBody=null, postUser=null, postTime=null;
+  try{
+    var localList=JSON.parse(localStorage.getItem('crks_entrenos_local')||'[]');
+    for(var i=0;i<localList.length;i++){
+      if(localList[i].id===id){ postBody=localList[i].body; postUser=localList[i].user_id; postTime=localList[i].created_at; break; }
+    }
+    // Borra el espejo local: por id, o por mismo texto + mismo minuto (duplicado Supabase + local)
+    var kept=[];
+    for(var j=0;j<localList.length;j++){
+      var x=localList[j];
+      var sameId=(x.id===id);
+      var sameDup=(postBody && x.body===postBody && String(x.created_at||'').slice(0,16)===String(postTime||'').slice(0,16));
+      if(!sameId && !sameDup){ kept.push(x); }
+    }
+    localStorage.setItem('crks_entrenos_local',JSON.stringify(kept));
+    // Limpia reacciones guardadas en local para ese entreno
+    try{
+      var rx=JSON.parse(localStorage.getItem('crks_reactions')||'{}');
+      if(rx[id]){ delete rx[id]; }
+      localStorage.setItem('crks_reactions',JSON.stringify(rx));
+    }catch(e){}
+  }catch(e){}
+  // Borra en Supabase: si el id es UUID, por id. Si es espejo local (sb-/local-), por texto + usuario.
+  try{
+    var isUuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(id));
+    if(isUuid){
+      var r=await sb.from('posts').delete().eq('id',id).eq('user_id',me.id);
+      if(r.error) throw r.error;
+    } else if(postBody){
+      var r2=await sb.from('posts').delete().eq('user_id',me.id).eq('body',postBody);
+      if(r2.error) throw r2.error;
+    }
+  }catch(e){
+    setStatus('⚠️ Se borró de este celular, pero en Supabase quedó pendiente: '+e.message);
+  }
+  try{ await render(); }catch(e){}
+};
+
 
 // --- FIX DEFINITIVO PILLS: CSS más fuerte que .publish-card button ---
 (function(){let st=document.createElement('style');st.id='crks-pills-fix';st.textContent=`
