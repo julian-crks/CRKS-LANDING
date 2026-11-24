@@ -19,19 +19,46 @@ input,textarea,select{width:100%;padding:10px;margin:4px 0;border:1px solid var(
 button{padding:9px 14px;border:0;border-radius:4px;background:var(--y);color:#12261f;font:600 1rem Barlow,sans-serif;cursor:pointer}button.g{background:transparent;color:var(--ink);outline:1px solid var(--mut)}
 header button{background:#fff3}small,.m{color:var(--mut)}img{max-width:100%;border-radius:4px;margin:6px 0}
 .auth{max-width:380px;margin:12vh auto}:focus-visible{outline:3px solid var(--y);outline-offset:2px}
+
+/* LANDING CRKS */
+.landing{background:#070807;color:#fff;font-family:'Barlow Condensed',Impact,sans-serif}
+.l-top{display:flex;justify-content:space-between;align-items:center;padding:14px 18px;background:#000}
+.l-logo{font-size:2rem;font-weight:700;letter-spacing:.02em;color:#B4FF00}
+.l-logo span{color:#B4FF00}
+.l-unir{background:#B4FF00;color:#000;border:0;border-radius:999px;padding:10px 28px;font:700 1rem 'Barlow Condensed',sans-serif;letter-spacing:.12em;cursor:pointer}
+.l-hero{padding:38px 20px 28px;max-width:900px}
+.l-eyebrow{color:#B4FF00;letter-spacing:.28em;font-size:.95rem;font-weight:700}
+.l-hero h1{font-size:clamp(3.2rem,10vw,6.5rem);line-height:.88;margin:14px 0 16px;letter-spacing:.01em}
+.l-hero h1 .green{color:#B4FF00}
+.l-hero p{font-family:Barlow,sans-serif;color:#d6ddd8;font-size:1.1rem;max-width:560px;line-height:1.5}
+.l-btns{display:flex;gap:12px;flex-wrap:wrap;margin-top:22px}
+.l-btn-primary{background:#B4FF00;color:#000;border:0;border-radius:999px;padding:13px 20px;font:700 1rem 'Barlow Condensed',sans-serif;letter-spacing:.06em;cursor:pointer}
+.l-btn-ghost{background:transparent;color:#fff;border:1.5px solid #fff;border-radius:999px;padding:12px 20px;font:700 1rem 'Barlow Condensed',sans-serif;letter-spacing:.06em;cursor:pointer}
+.l-ticker{background:#B4FF00;color:#000;overflow:hidden;white-space:nowrap;padding:10px 0;font-weight:700;letter-spacing:.08em}
+.l-ticker span{display:inline-block;padding-right:18px;animation:tick 18s linear infinite}
+@keyframes tick{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+.l-auth-wrap{max-width:900px;margin:0 auto;padding:28px 18px 40px}
+
+.home-sec{max-width:900px;margin:0 auto;padding:18px}
+.home-sec h2{font-size:1.9rem;margin:18px 0 10px}
+.home-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:640px){.home-grid{grid-template-columns:1fr}}
+.home-card{background:var(--card);border-radius:8px;padding:14px}
+.home-card img{width:100%;border-radius:6px}
 </style></head><body><div id="app"></div>
 <script>
 const SB_URL='https://oqyjbradimrzhrcawept.supabase.co',SB_KEY='sb_publishable_f1rIroehbs0PaGBu2DCqkA_MBA4CtLP';
 const sb=supabase.createClient(SB_URL,SB_KEY),$=s=>document.querySelector(s),V={};
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fd=d=>d?new Date(d).toLocaleString('es-CO',{dateStyle:'medium',timeStyle:'short'}):'';
-let me=null,prof=null,isAdmin=false,tab='feed';
+let me=null,prof=null,isAdmin=false,tab='home';
 sb.auth.onAuthStateChange((_,s)=>{me=s?.user||null;setTimeout(async()=>{if(me)await loadMe();render()},0)});
 async function loadMe(){const [p,a]=await Promise.all([sb.from('profiles').select('*').eq('id',me.id).single(),sb.rpc('is_admin')]);prof=p.data;isAdmin=a.data===true}
 const go=t=>{tab=t;render()};
 async function render(){
  if(!me)return $('#app').innerHTML=`<div class="card auth"><h1>CRKS</h1><p class=m>Run Cracks Colombia. Entrena, publica y suma racha.</p><input id=n placeholder="Tu nombre (solo para crear cuenta)"><input id=e type=email placeholder="Correo"><input id=p type=password placeholder="Contraseña (mínimo 6)"><div class=row><button onclick="login()">Entrar</button><button class=g onclick="signup()">Crear cuenta</button></div><p id=msg></p></div>`;
- const nav=[['feed','Entrenos'],['rank','Ranking'],['meet','Encuentros'],['retos','Retos'],['eventos','Eventos'],['tienda','Tienda'],['perfil','Perfil']];if(isAdmin)nav.push(['admin','Admin']);
+
+ const nav=[['home','Inicio'],['feed','Entrenos'],['rank','Ranking'],['meet','Encuentros'],['retos','Retos'],['eventos','Eventos'],['tienda','Tienda'],['perfil','Perfil']];if(isAdmin)nav.push(['admin','Admin']);
  $('#app').innerHTML=`<header><b>CRKS</b><span>🔥 ${prof?.streak||0} · ${esc(prof?.name)}</span><button onclick="sb.auth.signOut()">Salir</button></header><nav>${nav.map(([k,l])=>`<a class="${k==tab?'on':''}" onclick="go('${k}')">${l}</a>`).join('')}</nav><main id=v>Cargando…</main>`;
  try{$('#v').innerHTML=await V[tab]()}catch(e){$('#v').innerHTML='<p>Error: '+esc(e.message)+'</p>'}
 }
@@ -41,6 +68,21 @@ async function signup(){const{data,error}=await sb.auth.signUp({email:$('#e').va
 async function up(f){if(!f)return null;const p=`${me.id}/${Date.now()}-${f.name.replace(/[^\w.]/g,'_')}`;const{error}=await sb.storage.from('media').upload(p,f);if(error){alert(error.message);return null}return sb.storage.from('media').getPublicUrl(p).data.publicUrl}
 async function del(t,id){if(!confirm('¿Eliminar?'))return;const{error}=await sb.from(t).delete().eq('id',id);if(error)alert(error.message);render()}
 const img=u=>u?`<img src="${esc(u)}" alt="">`:'';
+
+
+V.home=async()=>{
+ const[{data:ps},{data:ms},{data:pr},{data:ch}]=await Promise.all([
+  sb.from('posts').select('*,profiles(name),likes(user_id),comments(id)').order('created_at',{ascending:false}).limit(5),
+  sb.from('meetups').select('*,profiles(name),meetup_going(user_id)').order('starts_at').limit(3),
+  sb.from('products').select('*').order('created_at',{ascending:false}).limit(4),
+  sb.from('challenges').select('*').order('created_at',{ascending:false}).limit(3)
+ ]);
+ return `<div class="landing"><div class="l-hero" style="padding-top:22px"><div class="l-eyebrow">CLUB DEPORTIVO • COLOMBIA</div><h1>NACIMOS<br>PARA<br><span class="green">RENDIR.</span></h1><p>Entrena con tus cracks. Comparte cada kilómetro, acepta retos y cuadra la próxima salida con los Cracks.</p><div class="l-btns"><button class="l-btn-primary" onclick="go('feed')">📷 PUBLICA TU ENTRENO</button><button class="l-btn-ghost" onclick="go('meet')">🤝 ARMA UN ENCUENTRO</button></div></div><div class="l-ticker"><span>PREPÁRATE ⚡ CRKS ⚡ ENTRENA ⚡ COMPARTE ⚡ SUPÉRATE ⚡ CRKS ⚡ ENTRENA ⚡ COMPARTE ⚡ SUPÉRATE ⚡&nbsp;&nbsp;PREPÁRATE ⚡ CRKS ⚡ ENTRENA ⚡ COMPARTE ⚡ SUPÉRATE ⚡ CRKS ⚡ ENTRENA ⚡ COMPARTE ⚡ SUPÉRATE ⚡</span></div></div>
+ <div class="home-sec"><h2>🔥 Últimos entrenos</h2>${((ps||[]).map(p=>`<div class="card"><b>${esc(p.profiles?.name||'Crack')}</b> <small>${fd(p.created_at)} · ${esc(p.sport||'')} · ${+p.km} km · ${p.minutes} min</small><p>${esc(p.body)}</p>${img(p.image_url)}<div class="row"><span>❤️ ${p.likes.length} · 💬 ${p.comments.length}</span></div></div>`).join('')||'<p class=m>Aún no hay entrenos. Publica el primero.</p>')}<button class=g onclick="go('feed')">Ver todos los entrenos →</button>
+ <h2>🤝 Próximos encuentros</h2>${((ms||[]).map(m=>`<div class="card"><h3>${esc(m.title)}</h3><div class=m>${esc(m.place)} · ${fd(m.starts_at)} · por ${esc(m.profiles?.name||'')}</div><div class=m>Van ${m.meetup_going.length} cracks</div></div>`).join('')||'<p class=m>No hay encuentros programados.</p>')}<button class=g onclick="go('meet')">Ver encuentros →</button>
+ <h2>🏆 Retos</h2>${((ch||[]).map(r=>`<div class="card">${img(r.cover_url)}<h3>${esc(r.title)}</h3><p>${esc(r.description)}</p><div class=m>Meta: ${+r.goal_km} km</div></div>`).join('')||'<p class=m>No hay retos activos.</p>')}<button class=g onclick="go('retos')">Ver retos →</button>
+ <h2>🛍️ Merch / Tienda</h2><div class="home-grid">${((pr||[]).filter(r=>r.active!==false).map(r=>`<div class="home-card">${img(r.image_url)}<h3>${esc(r.name)}</h3><p>${esc(r.description)}</p><b>${esc(r.price)}</b></div>`).join('')||'<p class=m>Pronto más merch CRKS.</p>')}</div><br><button class=g onclick="go('tienda')">Ver tienda →</button></div>`;
+};
 
 V.feed=async()=>{
  const{data:ps}=await sb.from('posts').select('*,profiles(name),likes(user_id),comments(id,body,profiles(name))').order('created_at',{ascending:false}).limit(30);
