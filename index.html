@@ -350,7 +350,8 @@ window.setStatus=function(msg){let el=document.getElementById('entrenoStatus');i
 window.up=async function(f){if(!f)return null;try{let blob=null;try{let dataUrl=await new Promise((res,rej)=>{let r=new FileReader();r.onload=()=>res(r.result);r.onerror=rej;r.readAsDataURL(f);});let imgEl=await new Promise((res,rej)=>{let im=new Image();im.onload=()=>res(im);im.onerror=rej;im.src=dataUrl;});let max=800,w=imgEl.naturalWidth||imgEl.width,h=imgEl.naturalHeight||imgEl.height;if(w>max||h>max){let rr=Math.min(max/w,max/h);w=Math.round(w*rr);h=Math.round(h*rr);}let c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').drawImage(imgEl,0,0,w,h);blob=await new Promise(res=>c.toBlob(res,'image/jpeg',0.55));}catch(e){blob=null;}let toUpload=blob||f;let name=(me&&me.id?me.id:'anon')+'/'+Date.now()+'.jpg';let upRes=await sb.storage.from('media').upload(name,toUpload,{upsert:true,contentType:'image/jpeg'});if(upRes.error)return null;return sb.storage.from('media').getPublicUrl(name).data.publicUrl;}catch(e){return null;}};
 // --- getPosts: mezcla Supabase + guardado local (para que nunca se pierda un entreno) ---
 let __origGetPosts=window.getPosts;
-window.getPosts=async function(limit){let fromSb=[];try{fromSb=await __origGetPosts(limit);}catch(e){fromSb=[];}let local=[];try{local=JSON.parse(localStorage.getItem('crks_entrenos_local')||'[]');}catch(e){local=[];}let merged=[...local,...(fromSb||[])];let seen=new Set();merged=merged.filter(x=>{let k=(x.user_id||'')+'|'+(x.body||'')+'|'+String(x.created_at||'').slice(0,16);if(seen.has(k))return false;seen.add(k);return true;});merged.sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));window.__crksCounts={sb:(fromSb||[]).length,local:local.length,total:merged.length};return merged.slice(0,limit||50);};
+window.getPosts=async function(limit){let fromSb=[];try{fromSb=await __origGetPosts(limit);}catch(e){fromSb=[];}let local=[];try{local=JSON.parse(localStorage.getItem('crks_entrenos_local')||'[]');}catch(e){local=[];}let merged=[...local,...(fromSb||[])];let seen=new Set();merged=merged.filter(x=>{let k=(x.user_id||'')+'|'+(x.body||'')+'|'+String(x.created_at||'').slice(0,16);if(seen.has(k))return false;seen.add(k);return true;});merged.sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));try{let rx={};try{rx=JSON.parse(localStorage.getItem('crks_reactions')||'{}');}catch(e){rx={};}merged.forEach(x=>{if(rx[x.id]){let rl=rx[x.id];x.likes=x.likes||[];rl.likes.forEach(y=>{if(!x.likes.some(z=>z.user_id===y.user_id))x.likes.push(y);});x.comments=x.comments||[];rl.comments.forEach(c=>{if(!x.comments.some(z=>z.body===c.body&&z.profiles?.name===c.profiles?.name))x.comments.push(c);});}});}catch(e){}
+window.__crksCounts={sb:(fromSb||[]).length,local:local.length,total:merged.length};return merged.slice(0,limit||50);};
 // --- Publicar: 3 intentos Supabase + respaldo local ---
 window.post=async function(){let btn=document.getElementById('btnPublicarEntreno');try{
 if(btn&&btn.disabled)return;if(btn){btn.disabled=true;btn.textContent='Publicando…';}
@@ -390,8 +391,41 @@ finally{let b=document.getElementById('btnPublicarEntreno');if(b){b.disabled=fal
 // Delegación: si el onclick falla, el clic igual publica
 document.addEventListener('click',function(e){if(e.target&&e.target.closest&&e.target.closest('#btnPublicarEntreno')){e.preventDefault();post();}});
 // --- Reaccionar / comentar corto ---
-window.like=async function(id,l){if(!me)return alert('Inicia sesión para reaccionar');try{let r=await(l?sb.from('likes').delete().match({post_id:id,user_id:me.id}):sb.from('likes').insert({post_id:id,user_id:me.id}));if(r.error)throw r.error;await render();}catch(e){if(String(id).startsWith('local-')){alert('Este entreno está guardado solo en este celular. Para reaccionar, publícalo en la nube con el SQL de posts.');}else alert('No se pudo reaccionar. Error: '+e.message);}};
-window.cmtInline=async function(id){let inp=document.getElementById('cmt-'+id);if(!inp)return;let body=(inp.value||'').trim();if(!body)return alert('Escribe un comentario corto');if(body.length>120)return alert('Máx. 120 caracteres');if(!me)return alert('Inicia sesión para comentar');try{let r=await sb.from('comments').insert({post_id:id,user_id:me.id,body});if(r.error)throw r.error;inp.value='';await render();}catch(e){alert('No se pudo comentar. Error: '+e.message);}};
+window.__localReact=function(id,kind,body){
+  try{
+    var localList=JSON.parse(localStorage.getItem('crks_entrenos_local')||'[]');
+    var idx=-1;
+    for(var i=0;i<localList.length;i++){ if(localList[i].id===id){ idx=i; break; } }
+    if(idx>=0){
+      if(kind==='like'){
+        localList[idx].likes=localList[idx].likes||[];
+        var li=-1;
+        for(var j=0;j<localList[idx].likes.length;j++){ if(localList[idx].likes[j].user_id===me.id){ li=j; break; } }
+        if(li>=0){ localList[idx].likes.splice(li,1); } else { localList[idx].likes.push({user_id:me.id}); }
+      } else {
+        localList[idx].comments=localList[idx].comments||[];
+        localList[idx].comments.push({id:'c-'+Date.now(),body:body,profiles:{name:(prof&&prof.name)||'Crack'}});
+      }
+      localStorage.setItem('crks_entrenos_local',JSON.stringify(localList));
+      return true;
+    }
+  }catch(e){}
+  try{
+    var rx=JSON.parse(localStorage.getItem('crks_reactions')||'{}');
+    if(!rx[id]){ rx[id]={likes:[],comments:[]}; }
+    if(kind==='like'){
+      var li2=-1;
+      for(var k=0;k<rx[id].likes.length;k++){ if(rx[id].likes[k].user_id===me.id){ li2=k; break; } }
+      if(li2>=0){ rx[id].likes.splice(li2,1); } else { rx[id].likes.push({user_id:me.id}); }
+    } else {
+      rx[id].comments.push({id:'c-'+Date.now(),body:body,profiles:{name:(prof&&prof.name)||'Crack'}});
+    }
+    localStorage.setItem('crks_reactions',JSON.stringify(rx));
+    return true;
+  }catch(e){ return false; }
+};
+window.like=async function(id,l){if(!me)return alert('Inicia sesión para reaccionar');let isLocal=String(id).startsWith('local-')||String(id).startsWith('sb-');if(isLocal){__localReact(id,'like');await render();return;}try{let r=await(l?sb.from('likes').delete().match({post_id:id,user_id:me.id}):sb.from('likes').insert({post_id:id,user_id:me.id}));if(r.error)throw r.error;await render();}catch(e){__localReact(id,'like');setStatus('❤️ Reacción guardada en este celular (Supabase: '+e.message+')');await render();}};
+window.cmtInline=async function(id){let inp=document.getElementById('cmt-'+id);if(!inp)return;let body=(inp.value||'').trim();if(!body)return alert('Escribe un comentario corto');if(body.length>120)return alert('Máx. 120 caracteres');if(!me)return alert('Inicia sesión para comentar');let isLocal=String(id).startsWith('local-')||String(id).startsWith('sb-');if(isLocal){__localReact(id,'comment',body);inp.value='';await render();return;}try{let r=await sb.from('comments').insert({post_id:id,user_id:me.id,body});if(r.error)throw r.error;inp.value='';await render();}catch(e){__localReact(id,'comment',body);inp.value='';setStatus('💬 Comentario guardado en este celular (Supabase: '+e.message+')');await render();}};
 // --- Entrenos: mismo diseño, con Tiempo 10 : 10 : 10 y Pace 05 : 09 ---
 V.feed=async()=>{
 let ps=await getPosts(50);let sports=['Running','Ciclismo','Natación','Trail','Fuerza','Movilidad'];
