@@ -204,7 +204,7 @@ V.feed=async()=>{
    <label class=m>Foto</label><label class="g" style="display:block;text-align:center;padding:12px;border:1.5px dashed #666;cursor:pointer">📷 Añadir foto<input id=pf type="file" accept="image/*" style="display:none" onchange="previewEntreno(this)"></label><div id="entrenoPreview"></div>
    <button class="l-btn-primary" style="width:100%;padding:15px;margin-top:10px" onclick="post()">Publicar entreno</button><small class=m>La foto se comprime a 800px para que cargue liviano.</small>
   </div>
-  <h2>Entrenos recientes</h2>${cards}</div>`;
+  <h2>Entrenos recientes</h2><small class=m>📡 Supabase: ${window.__crksCounts?window.__crksCounts.sb:0} • En este celular: ${window.__crksCounts?window.__crksCounts.local:0} • Total: ${window.__crksCounts?window.__crksCounts.total:0}</small>${cards}</div>`;
 };
 window.pickSport=(s,btn)=>{const sel=document.getElementById('ps');if(sel)sel.value=s;document.querySelectorAll('.sport-pill').forEach(b=>b.classList.toggle('active',b.dataset.sport==s));};
 window.previewEntreno=(inp)=>{const f=inp.files&&inp.files[0];const box=document.getElementById('entrenoPreview');if(!f||!box)return;const url=URL.createObjectURL(f);box.innerHTML=`<img loading="lazy" src="${url}" style="width:100%;border-radius:12px;margin-top:8px">`;};
@@ -350,7 +350,7 @@ window.setStatus=function(msg){let el=document.getElementById('entrenoStatus');i
 window.up=async function(f){if(!f)return null;try{let blob=null;try{let dataUrl=await new Promise((res,rej)=>{let r=new FileReader();r.onload=()=>res(r.result);r.onerror=rej;r.readAsDataURL(f);});let imgEl=await new Promise((res,rej)=>{let im=new Image();im.onload=()=>res(im);im.onerror=rej;im.src=dataUrl;});let max=800,w=imgEl.naturalWidth||imgEl.width,h=imgEl.naturalHeight||imgEl.height;if(w>max||h>max){let rr=Math.min(max/w,max/h);w=Math.round(w*rr);h=Math.round(h*rr);}let c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').drawImage(imgEl,0,0,w,h);blob=await new Promise(res=>c.toBlob(res,'image/jpeg',0.55));}catch(e){blob=null;}let toUpload=blob||f;let name=(me&&me.id?me.id:'anon')+'/'+Date.now()+'.jpg';let upRes=await sb.storage.from('media').upload(name,toUpload,{upsert:true,contentType:'image/jpeg'});if(upRes.error)return null;return sb.storage.from('media').getPublicUrl(name).data.publicUrl;}catch(e){return null;}};
 // --- getPosts: mezcla Supabase + guardado local (para que nunca se pierda un entreno) ---
 let __origGetPosts=window.getPosts;
-window.getPosts=async function(limit){let fromSb=[];try{fromSb=await __origGetPosts(limit);}catch(e){fromSb=[];}let local=[];try{local=JSON.parse(localStorage.getItem('crks_entrenos_local')||'[]');}catch(e){local=[];}let merged=[...local,...(fromSb||[])];merged.sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));return merged.slice(0,limit||50);};
+window.getPosts=async function(limit){let fromSb=[];try{fromSb=await __origGetPosts(limit);}catch(e){fromSb=[];}let local=[];try{local=JSON.parse(localStorage.getItem('crks_entrenos_local')||'[]');}catch(e){local=[];}let merged=[...local,...(fromSb||[])];let seen=new Set();merged=merged.filter(x=>{let k=(x.user_id||'')+'|'+(x.body||'')+'|'+String(x.created_at||'').slice(0,16);if(seen.has(k))return false;seen.add(k);return true;});merged.sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));window.__crksCounts={sb:(fromSb||[]).length,local:local.length,total:merged.length};return merged.slice(0,limit||50);};
 // --- Publicar: 3 intentos Supabase + respaldo local ---
 window.post=async function(){let btn=document.getElementById('btnPublicarEntreno');try{
 if(btn&&btn.disabled)return;if(btn){btn.disabled=true;btn.textContent='Publicando…';}
@@ -370,6 +370,8 @@ let sport=document.getElementById('ps')?.value||'Running';
 let saved=false,lastErr=null;
 let attempts=[{user_id:me.id,body,sport,km,minutes,image_url},{user_id:me.id,body,sport,km,minutes},{user_id:me.id,body}];
 for(let a of attempts){try{let r=await sb.from('posts').insert(a);if(!r.error){saved=true;break;}lastErr=r.error;}catch(e){lastErr=e;}}
+// Espejo local SIEMPRE: así se ve arriba aunque Supabase no deje leer (falta SELECT)
+try{let local2=[];try{local2=JSON.parse(localStorage.getItem('crks_entrenos_local')||'[]');}catch(e){local2=[];}local2.unshift({id:'sb-'+Date.now(),user_id:me.id,body,sport,km,minutes,image_url,created_at:new Date().toISOString(),profiles:{name:(prof&&prof.name)||'Crack',avatar_url:prof&&prof.avatar_url,streak:(prof&&prof.streak)||0},likes:[],comments:[]});localStorage.setItem('crks_entrenos_local',JSON.stringify(local2.slice(0,50)));}catch(e){}
 if(!saved){
 // Respaldo local: el entreno SI queda publicado en tu celular aunque Supabase falle
 let local=[];try{local=JSON.parse(localStorage.getItem('crks_entrenos_local')||'[]');}catch(e){local=[];}
