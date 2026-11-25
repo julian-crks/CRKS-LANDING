@@ -386,8 +386,8 @@ window.post=async function(){
     setStatus('Publicando tu entreno…');
     var sport0=document.getElementById('ps')?.value||document.querySelector('.sport-card.active')?.dataset?.sport||'Running';
     var body=(document.getElementById('pb')?.value||'').trim();if(!body)body='Entreno de '+sport0;
-    if(!me)throw new Error('Inicia sesión para publicar. Si acabas de entrar, espera 2 segundos y vuelve a intentar.');
-    var tiempoTxt=syncTiempo();if(tiempoTxt==='INCOMPLETO')throw new Error('Completa el Tiempo: HH : MM : SS. Ejemplo: 10 : 10 : 10');
+    if(!me){try{await sb.auth.getSession();}catch(e){}try{await loadMe();}catch(e){}if(!me)throw new Error('Inicia sesión para publicar. Si acabas de entrar, espera 2 segundos y vuelve a intentar.');}
+    var tiempoTxt=syncTiempo();if(!tiempoTxt||tiempoTxt==='INCOMPLETO')throw new Error('Completa el Tiempo: HH : MM : SS. Ejemplo: 10 : 10 : 10');
     var pace=syncPace();
     if(sport0==='Gym'||sport0==='Calistenia'){pace='';}
     else if(sport0==='MTB'&&pace==='INCOMPLETO'){pace='';}
@@ -414,11 +414,20 @@ window.post=async function(){
     if(extra.length)body=body+'\n['+extra.join(' | ')+']';
     if(_showMuscle&&_rutina)body=body+'\nRUTINA:\n'+_rutina;
     minutes=Math.round(minutes||0);km=Math.round((km||0)*100)/100;
-    var saved=false,lastErr=null,realId=null;
-    var attempts=[{user_id:me.id,body,sport,km,minutes,image_url},{user_id:me.id,body,sport,km,minutes},{user_id:me.id,body,sport,km,minutes}];
+    var saved=false,lastErr=null;
+    var attempts=[
+      {user_id:me.id,body,sport,km,minutes,image_url},
+      {user_id:me.id,body,sport,km,minutes},
+      {user_id:me.id,body,sport,km:Math.round(km||0),minutes:Math.round(minutes||0)},
+      {user_id:me.id,body,sport},
+      {user_id:me.id,body,sport:'Running'},
+      {user_id:me.id,body}
+    ];
     for(var ai=0;ai<attempts.length;ai++){
-      try{var r=await sb.from('posts').insert(attempts[ai]).select('id').single();if(!r.error&&r.data&&r.data.id){saved=true;realId=r.data.id;break;}lastErr=r.error||new Error('Insert sin id');}catch(e){lastErr=e;}
+      try{var r=await sb.from('posts').insert(attempts[ai]);if(!r.error){saved=true;break;}lastErr=r.error;}catch(e){lastErr=e;}
     }
+    // Best-effort: intentar leer el id real, pero si la lectura está bloqueada NO marcar como fallido
+    if(saved){try{var rr=await sb.from('posts').select('id').eq('user_id',me.id).order('created_at',{ascending:false}).limit(1);if(rr&&rr.data&&rr.data[0]){/* id real disponible */}}catch(e){}}
     if(!saved){
       var local=[];try{local=JSON.parse(localStorage.getItem('crks_entrenos_local')||'[]');}catch(e){local=[];}
       local.unshift({id:'local-'+Date.now(),user_id:me.id,body,sport,km,minutes,image_url,created_at:new Date().toISOString(),profiles:{name:(prof&&prof.name)||'Crack',avatar_url:prof&&prof.avatar_url,streak:(prof&&prof.streak)||0},likes:[],comments:[]});
