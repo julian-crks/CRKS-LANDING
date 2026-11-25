@@ -1517,4 +1517,210 @@ try{
   };
 }catch(e){}
 </script>
+
+<script>
+// === PERFIL V21 - Lo más impactante de la red ===
+const CRKS_FRASES_DIA=[
+'No entrenas para ser mejor que otros. Entrenas para ser mejor que ayer.',
+'El mérito no se regala, se suda. Hoy te toca sudarlo.',
+'Hay días que cuesta. Esos son los que más te hacen Crack.',
+'No necesitas ser atleta profesional para entrenar como uno. Necesitas no rendirte.',
+'Tu cuerpo puede más de lo que tu mente cree. Hoy demuéstralo.',
+'Un kilómetro más es una excusa menos. Hoy, un kilómetro más.',
+'Los cracks no esperan motivación, la crean con cada entreno.',
+'Tu yo de mañana te está mirando entrenar hoy. No le falles.',
+'No se trata de ser el más rápido, sino de no parar cuando duele.',
+'Cada entreno es una promesa que te cumples. Hoy, cúmpletela.',
+'El dolor pasa, la racha queda. No rompas la racha.',
+'Si hoy estás cansado, entrena cansado. Así se construye el carácter.',
+'La montaña no pregunta si estás listo. Tú subes y te haces listo.',
+'Nadie te va a aplaudir por quedarte en casa. Sal y haz que te vean.',
+'Eres la persona común que hace cosas extraordinarias. Eso es ser Crack.',
+'El esfuerzo de hoy es el orgullo de mañana.',
+'No cuentes los kilómetros, haz que los kilómetros cuenten.',
+'Cuando sientas que no puedes más, ahí es donde empieza el mérito.',
+'Entrenar es decirte a ti mismo: yo sí puedo, yo sí sigo.',
+'La constancia le gana al talento cuando el talento no entrena.',
+'Hoy no compites con nadie. Compites con tu pereza. Gánale.',
+'Tu mejor tiempo no es un número, es la prueba de que puedes más.',
+'Si te caes, te levantas. Si te cansas, respiras y sigues. Así son los Cracks.',
+'El club no te hace fuerte. Tú haces fuerte al club con cada entreno.',
+'No hay atajos para el mérito. Hay entrenos, hay sudor, hay racha.',
+'Hoy es un buen día para ser la versión que admiras.',
+'La persona que madruga para entrenar ya ganó el día antes de que empiece.',
+'No entrenas para la foto. Entrenas para la persona que ves en el espejo.',
+'Un día más, un entreno más, un paso más cerca de tu mejor versión.',
+'El que no se rinde, siempre llega. Hoy, no te rindas.',
+'Tu esfuerzo inspira a alguien que hoy te está mirando en silencio.',
+'La disciplina es hacer lo que debes aunque no tengas ganas. Hoy toca.',
+'No busques ser perfecto. Busca ser constante. Lo demás llega.',
+'El sudor de hoy es la medalla de mañana.',
+'Si ayer pudiste, hoy también puedes. Y hoy puedes un poco más.',
+'Entrena con el corazón, termina con orgullo.',
+'No importa si son 1 km o 20 km. Importa que no te quedaste quieto.',
+'La superación no es gritar, es seguir cuando nadie te ve.',
+'Tu racha es tu palabra. Hoy, cumple tu palabra.',
+'Eres más fuerte que tu última excusa.',
+'Hoy el cuerpo pide descanso y el carácter pide entreno. Que gane el carácter.',
+'No hay día malo para entrenar, hay entreno que arregla el día.',
+'El mérito se ve en la racha, no en la excusa.',
+'Corre, pedalea, nada, carga. Lo que sea, pero muévete. Hoy muévete.',
+'La persona común que no se rinde se convierte en ejemplo.',
+'Hoy no entrenas por obligación. Entrenas porque te lo mereces.',
+'Tu historia se escribe con cada entreno. Hoy escribe una buena página.',
+'El que entrena hoy, mañana agradece.',
+'No te compares con el de al lado. Supérate a ti. Esa es la verdadera competencia.',
+'La fuerza no se compra, se entrena. Hoy se entrena.',
+'Si hoy te cuesta, es porque estás creciendo. Sigue.',
+'Un Crack no es el que nunca se cansa. Es el que sigue cansado.',
+'Tu esfuerzo de hoy es la motivación de otro mañana.',
+'No dejes que un día malo rompa una racha buena.',
+'Entrena hoy para que mañana digas: qué bueno que no paré.',
+'El orgullo de terminar vale más que la pereza de empezar.',
+'Hoy, un entreno más. Mañana, una versión más fuerte de ti.',
+'No necesitas que te crean. Necesitas creerte tú. Y entrenar.',
+'La superación empieza cuando decides no parar.',
+'Tu nombre ya suena en el club. Hoy haz que suene más fuerte.',
+'Entrena, suma, sigue. Así se construye un Crack.'
+];
+function crksFraseHoy(){
+  try{
+    var d=new Date();var y=d.getFullYear(),m=d.getMonth(),day=d.getDate();
+    var seed=y*10000+m*100+day;
+    var idx=seed%CRKS_FRASES_DIA.length;
+    return CRKS_FRASES_DIA[idx];
+  }catch(e){return CRKS_FRASES_DIA[0];}
+}
+function crksFmtBestTime(min){
+  if(!min||min<=0)return '—';
+  var totalSeg=Math.round(min*60);
+  var h=Math.floor(totalSeg/3600), m2=Math.floor((totalSeg%3600)/60), s=totalSeg%60;
+  return String(h).padStart(2,'0')+' : '+String(m2).padStart(2,'0')+' : '+String(s).padStart(2,'0');
+}
+function crksFmtTotalTime(min){
+  if(!min||min<=0)return '0 min';
+  var h=Math.floor(min/60), m2=Math.round(min%60);
+  if(h>0)return h+' h '+m2+' min';
+  return Math.round(min)+' min';
+}
+V.perfil=async()=>{
+  try{
+    var ps=await getPosts(200);
+    var my=(ps||[]).filter(function(p){return p.user_id==me?.id;});
+    var name=(prof&&prof.name)?prof.name:'Crack';
+    var avatar=(prof&&prof.avatar_url)?prof.avatar_url:'';
+    var streak=(prof&&prof.streak)?+prof.streak||0:0;
+    var bestStreak=(prof&&prof.best_streak)?+prof.best_streak||0:streak;
+    // Sums por deporte
+    var sports={
+      'Running':{label:'Running',emoji:'🏃',entrenos:0,km:0,time:0,best:null,kilos:0},
+      'Trail':{label:'Trail',emoji:'⛰️',entrenos:0,km:0,time:0,best:null,kilos:0},
+      'Ciclismo Ruta':{label:'Ciclismo Ruta',emoji:'🚴',entrenos:0,km:0,time:0,best:null,kilos:0},
+      'MTB':{label:'MTB',emoji:'🚵',entrenos:0,km:0,time:0,best:null,kilos:0},
+      'Natación':{label:'Natación',emoji:'🏊',entrenos:0,km:0,time:0,best:null,kilos:0},
+      'Gym':{label:'Gym',emoji:'🏋️',entrenos:0,km:0,time:0,best:null,kilos:0},
+      'Calistenia':{label:'Calistenia',emoji:'💪',entrenos:0,km:0,time:0,best:null,kilos:0}
+    };
+    var totalKm=0,totalTime=0,totalKilos=0;
+    my.forEach(function(p){
+      var s=String(p.sport||'').toLowerCase();
+      var key=null;
+      if(s.includes('trail'))key='Trail';
+      else if(s.includes('ciclismo')||s.includes('ruta')&&s.includes('bici')||s.includes('ciclismo ruta'))key='Ciclismo Ruta';
+      else if(s.includes('mtb')||s.includes('monta'))key='MTB';
+      else if(s.includes('nataci')||s.includes('swim'))key='Natación';
+      else if(s.includes('calistenia'))key='Calistenia';
+      else if(s.includes('gym')||s.includes('fuerza')||s.includes('gimnasio'))key='Gym';
+      else if(s.includes('running')||s.includes('correr')||s.includes('run'))key='Running';
+      else if(s.includes('bici')||s.includes('ciclismo'))key='Ciclismo Ruta';
+      else key='Running';
+      if(!sports[key])key='Running';
+      var sp=sports[key];
+      sp.entrenos++;
+      var km=+p.km||0;sp.km+=km;totalKm+=km;
+      var mins=0;
+      if(p.minutes)mins=+p.minutes||0;
+      else{
+        var mt=/Tiempo:\s*([0-9:]+)/.exec(p.body||'');if(mt)try{mins=parseTiempo(mt[1])||0;}catch(e){}
+      }
+      if(mins>0){sp.time+=mins;totalTime+=mins;if(sp.best==null||mins<sp.best)sp.best=mins;}
+      var mk=/Kilos:\s*([0-9.]+)/.exec(p.body||'');var kilos=mk?+mk[1]:0;if(kilos>0){sp.kilos+=kilos;totalKilos+=kilos;}
+    });
+    // Insignias congruentes: solo desbloqueada si el progreso real cumple la meta
+    var unlockedLocal=[];try{unlockedLocal=crksGetUnlocked();}catch(e){}
+    var sumsForBadges={run:sports['Running'].km,bike:sports['Ciclismo Ruta'].km+sports['MTB'].km,swim:sports['Natación'].km,kilos:totalKilos};
+    var badgesHtml=CRKS_BADGES.map(function(b){
+      var prog=0;try{prog=crksBadgeProgress(b,sumsForBadges,my,streak,my);}catch(e){prog=0;}
+      var meta=b.meta||1;
+      var isUnlocked=(prog>=meta)||unlockedLocal.indexOf(b.id)>=0;
+      var pct=Math.min(100,Math.round((prog/meta)*100));
+      var progTxt='';
+      if(b.tipo==='racha')progTxt=prog+' / '+meta+' días';
+      else if(b.tipo==='run'||b.tipo==='bike'||b.tipo==='swim')progTxt=Number(prog).toFixed(1)+' / '+meta+' km';
+      else if(b.tipo==='kilos')progTxt=prog+' / '+meta+' kg';
+      else if(b.tipo==='trail-first')progTxt=isUnlocked?'Trail completado ✅':'Aún no has hecho Trail';
+      else if(b.tipo==='workouts')progTxt=prog+' / '+meta+' entrenos';
+      else progTxt=prog+' / '+meta;
+      if(isUnlocked){
+        return '<div style="background:#1a2a00;border:2px solid #A6FF00;border-radius:16px;padding:14px 8px;text-align:center"><div style="font-size:44px">'+b.emoji+'</div><div style="font-weight:900;font-size:13px;margin-top:6px">'+esc(b.name)+'</div><div style="font-size:11px;opacity:.85;margin-top:4px;line-height:1.4">'+esc(b.desc)+'</div><div style="font-size:11px;color:#A6FF00;font-weight:900;margin-top:8px">✅ DESBLOQUEADA · Al mérito</div></div>';
+      }
+      return '<div style="background:#111;border:1px solid #333;border-radius:16px;padding:12px 8px;text-align:center;opacity:.9"><div style="font-size:36px;filter:grayscale(1) brightness(.6)">'+b.emoji+'</div><div style="font-weight:800;font-size:12px;margin-top:6px">'+esc(b.name)+'</div><div style="font-size:11px;opacity:.75;line-height:1.4">'+esc(b.desc)+'</div><div style="background:#222;border-radius:999px;height:8px;margin:8px 0 4px;overflow:hidden"><div style="width:'+pct+'%;height:100%;background:#A6FF00"></div></div><div style="font-size:11px;font-weight:800">🔒 '+esc(progTxt)+' · '+pct+'%</div></div>';
+    }).join('');
+    var unlockedCount=CRKS_BADGES.filter(function(b){var prog=0;try{prog=crksBadgeProgress(b,sumsForBadges,my,streak,my);}catch(e){}return (prog>=(b.meta||1))||unlockedLocal.indexOf(b.id)>=0;}).length;
+    // Racha: siguiente meta
+    var nextMeta=streak<3?3:streak<7?7:streak<14?14:streak<30?30:streak<60?60:streak<100?100:streak+30;
+    var rachaPct=streak>0?Math.min(100,Math.round((streak/nextMeta)*100)):0;
+    var rachaMsg='';
+    if(streak===0)rachaMsg='Hoy es el día. Publica tu primer entreno y empieza tu racha. No la dejes en cero.';
+    else if(streak===1)rachaMsg='Ya empezaste. Mañana es el día que separa a los que intentan de los que no paran.';
+    else if(streak<7)rachaMsg='Vas bien. No rompas la racha ahora. Mañana, un entreno más y sigues subiendo.';
+    else if(streak<30)rachaMsg='Ya eres constante. La racha se está volviendo tu identidad. No la sueltes.';
+    else rachaMsg='Esto ya no es suerte. Es disciplina. Eres ejemplo para todo el club. Sigue.';
+    var frase=crksFraseHoy();
+    var hoyTxt=new Date().toLocaleDateString('es-CO',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+    // Ranking personal
+    var rankingHtml=Object.keys(sports).map(function(k){
+      var sp=sports[k];
+      if(sp.entrenos===0)return '<div style="background:#111;border:1px solid #222;border-radius:14px;padding:12px"><div style="display:flex;justify-content:space-between;align-items:center"><b>'+sp.emoji+' '+sp.label+'</b><span class=m style="font-size:12px">Sin entrenos aún</span></div><p class=m style="margin:6px 0 0;font-size:12px">Publica tu primer '+sp.label+' y aquí queda tu marca.</p></div>';
+      var line='';
+      if(k==='Gym'||k==='Calistenia')line='<b>'+sp.entrenos+'</b> entrenos · <b>'+sp.kilos+'</b> kg · <b>'+crksFmtTotalTime(sp.time)+'</b>';
+      else line='<b>'+sp.entrenos+'</b> entrenos · <b>'+sp.km.toFixed(1)+' km</b> · <b>'+crksFmtTotalTime(sp.time)+'</b>';
+      var bestLine=(k==='Gym'||k==='Calistenia')?(sp.best?'Mejor tiempo: <b>'+crksFmtBestTime(sp.best)+'</b>':''):(sp.best?'Mejor tiempo: <b>'+crksFmtBestTime(sp.best)+'</b>':'');
+      return '<div style="background:#111;border:1px solid #333;border-radius:14px;padding:12px"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><b>'+sp.emoji+' '+sp.label+'</b><span style="background:#A6FF00;color:#000;font-size:11px;font-weight:900;padding:4px 8px;border-radius:999px">'+sp.entrenos+' entrenos</span></div><p style="margin:8px 0 4px;font-size:13px">'+line+'</p><p class=m style="margin:0;font-size:12px">'+bestLine+'</p></div>';
+    }).join('');
+    var header='<div class=card style="text-align:center;background:linear-gradient(180deg,#1a2a00,#111);border:2px solid #A6FF00;padding:22px 16px">'
+      +'<div style="font-size:11px;letter-spacing:3px;color:#A6FF00;font-weight:900">PERFIL CRACK ⚡</div>'
+      +'<img src="'+esc(avatar)+'" onerror="this.style.display=\'none\'" style="width:200px;height:200px;object-fit:cover;border-radius:50%;border:4px solid #A6FF00;display:block;margin:14px auto 10px;box-shadow:0 0 0 6px #1a2a00, 0 10px 30px rgba(166,255,0,.35)">'
+      +'<h1 style="margin:0;font-size:1.8rem;line-height:1.1">'+esc(name)+'</h1><p class=m style="margin:6px 0 0">Wellness Club - CRKS · Comunidad Cracks</p>'
+      +'<div style="display:flex;gap:8px;justify-content:center;margin:14px 0;flex-wrap:wrap"><span style="background:#000;border:1px solid #333;border-radius:999px;padding:7px 12px;font-size:12px;font-weight:800">🏋️ '+my.length+' entrenos</span><span style="background:#000;border:1px solid #333;border-radius:999px;padding:7px 12px;font-size:12px;font-weight:800">📏 '+totalKm.toFixed(1)+' km</span><span style="background:#000;border:1px solid #333;border-radius:999px;padding:7px 12px;font-size:12px;font-weight:800">🏅 '+unlockedCount+' / '+CRKS_BADGES.length+' insignias</span></div>'
+      +'<label style="display:block;text-align:left">Foto de perfil (200x200, redonda)<input id=pfp type=file accept="image/*"></label><button onclick="upPfp()">Actualizar foto</button>'
+      +'</div>';
+    var rachaHtml='<div class=card style="background:linear-gradient(180deg,#FF6B00,#1a0d00);border:2px solid #FF6B00;text-align:center;padding:20px 16px">'
+      +'<div style="font-size:11px;letter-spacing:3px;font-weight:900;color:#fff">🔥 TU RACHA · NO LA ROMPAS</div>'
+      +'<div style="font-size:64px;line-height:1;margin:8px 0">🔥</div>'
+      +'<div style="font-size:3rem;font-weight:900;line-height:1;color:#fff">'+streak+' <span style="font-size:1.2rem">días</span></div>'
+      +'<div style="font-size:12px;font-weight:800;opacity:.9">Récord personal: '+bestStreak+' días · Siguiente meta: '+nextMeta+' días</div>'
+      +'<div style="background:rgba(0,0,0,.45);border-radius:999px;height:12px;margin:14px 0 6px;overflow:hidden"><div style="width:'+rachaPct+'%;height:100%;background:#A6FF00"></div></div>'
+      +'<div style="font-size:12px;font-weight:800">'+rachaPct+'% hacia '+nextMeta+' días</div>'
+      +'<p style="font-size:14px;line-height:1.5;margin:12px 0 0;font-weight:700;color:#fff">'+esc(rachaMsg)+'</p>'
+      +'<p style="font-size:12px;opacity:.9;margin:8px 0 0">Si entrenas hoy, mañana sigues. Si hoy paras, la racha se rompe. Tú decides, Crack.</p></div>';
+    var fraseHtml='<div class=card style="border:2px solid #A6FF00;background:#111;text-align:center;padding:20px 16px">'
+      +'<div style="font-size:11px;letter-spacing:3px;color:#A6FF00;font-weight:900">✨ FRASE DEL DÍA · PARA TODOS LOS CRACKS</div>'
+      +'<div style="font-size:12px;opacity:.7;margin:6px 0">'+esc(hoyTxt)+'</div>'
+      +'<p style="font-size:1.35rem;line-height:1.4;font-weight:800;margin:10px 0">“'+esc(frase)+'”</p>'
+      +'<p class=m style="margin:0;font-size:12px">Una frase nueva cada día. La misma para todo el club. Hoy nos mueve a todos.</p></div>';
+    var insigniasHtml='<div class=card><h3>🏅 Mis insignias · Al mérito, congruentes con tus retos</h3><p class=m>Solo se desbloquea la que realmente lograste. La que está en gris, te falta camino. Y eso es bueno: ya sabes qué conquistar.</p><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'+badgesHtml+'</div></div>';
+    var rankingSection='<div class=card><h3>📊 Mi ranking personal · Sumatoria por deporte</h3><p class=m>Total: <b>'+my.length+' entrenos</b> · <b>'+totalKm.toFixed(1)+' km</b> · <b>'+crksFmtTotalTime(totalTime)+'</b> · <b>'+totalKilos+' kg</b></p><div style="display:grid;gap:10px">'+rankingHtml+'</div></div>';
+    var cierre='<div class=card style="text-align:center;background:linear-gradient(180deg,#1a2a00,#111);border:2px solid #A6FF00;padding:26px 18px">'
+      +'<div style="font-size:44px">🏆</div>'
+      +'<h2 style="margin:10px 0 6px;font-size:1.6rem;line-height:1.2">¡Felicitaciones,<br><span style="color:#A6FF00">'+esc(name)+ '!</span></h2>'
+      +'<p style="font-size:15px;line-height:1.6;margin:0">Gracias por ser un <b>Crack</b>.<br>Gracias por entrenar, por no rendirte, por sumar kilómetros, por inspirar al club con tu racha y tus insignias.<br>Este perfil es tuyo, <b>'+esc(name)+'</b>. Y este club es más fuerte porque tú estás aquí.</p>'
+      +'<p style="font-size:13px;font-weight:900;letter-spacing:1px;color:#A6FF00;margin:14px 0 0">⚡ '+esc(name).toUpperCase()+' · ERES CRKS · NACIMOS PARA RETARNOS ⚡</p>'
+      +'<button class=g style="width:100%;margin-top:14px" onclick="go(\'feed\')">Seguir sumando entrenos →</button></div>';
+    return '<h2 style="text-align:center;margin:6px 0">Mi Perfil ⚡</h2>'+header+rachaHtml+fraseHtml+insigniasHtml+rankingSection+cierre;
+  }catch(e){
+    return '<h2>Mi Perfil</h2><div class=card><p>Error al cargar perfil: '+esc(e.message)+'</p><label>Foto<input id=pfp type=file accept="image/*"></label><button onclick="upPfp()">Actualizar foto</button></div>';
+  }
+};
+</script>
 </body></html>
