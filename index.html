@@ -775,4 +775,79 @@ V.meet=async()=>{
  return '<h2>🤝 Encuentros</h2><p class=m>Libre para cualquiera. Cualquier crack puede proponer, no solo Admin. Al crearlo, todos lo ven. Ordenados del más próximo al más lejano.</p><div class=card style=border:2px solid #A6FF00><h3>Proponer encuentro</h3><label class=m>Título</label><input id=mt placeholder="Título, Ej: 10k domingo 6am"><label class=m>Lugar</label><input id=mp placeholder="Lugar, Ej: Parque"><label class=m>Fecha y hora</label><input id=md type=datetime-local><label class=m>📷 Foto (opcional)</label><input id=meet-photo type=file accept="image/*" onchange="crksMeetPhotoPreview(this)"><small class=m>Si la información viene en una imagen, súbela aquí. Si no, déjalo vacío, queda igual que siempre.</small><div id=meet-photo-wrap style="display:none;margin-top:8px"><img id=meet-photo-preview src="" style="width:100%;max-height:240px;object-fit:cover;border-radius:12px"><button class=g style="margin-top:6px" onclick="crksMeetPhotoRemove()">Quitar foto ✕</button></div><button class=l-btn-primary style=width:100%;padding:13px;margin-top:8px onclick="mk()">Proponer encuentro</button><small class=m>Al proponerlo, todos los cracks lo ven en Encuentros. Se borra solo 1 hora después de cumplida su fecha.</small></div><h3 style=margin:14px 0 10px>Próximos encuentros</h3>'+cards;
 };
 </script>
+
+<script>
+// === MERCH V15 + ADMIN OFICIAL runcrackscolombia@gmail.com ===
+const CRKS_ADMIN_EMAIL='runcrackscolombia@gmail.com';
+function crksIsAdmin(){try{return !!(me&&me.email&&String(me.email).toLowerCase()===CRKS_ADMIN_EMAIL);}catch(e){return false;}}
+// Enforzar Admin real en cada render: solo esa cuenta ve Admin
+try{
+  var _origRenderForV15=render;
+  render=async function(){try{isAdmin=crksIsAdmin();}catch(e){}await _origRenderForV15();try{if(!crksIsAdmin()){document.querySelectorAll('button, a').forEach(function(el){if((el.textContent||'').trim()==='Admin')el.style.display='none';});}}catch(e){}};
+}catch(e){}
+function crksGetAdminProducts(){try{return JSON.parse(localStorage.getItem('crks_products_admin')||'[]');}catch(e){return [];}}
+function crksWaLinkFor(productName){
+  var name=(prof&&prof.name)?prof.name:'Crack';
+  var msg='Hola CRKS, soy '+name+'. Quiero la mía - '+productName+'. ¿Me confirmas talla, color y cómo pedirla?';
+  return 'https://wa.me/573132019383?text='+encodeURIComponent(msg);
+}
+async function crksAddProductAdmin(){
+  if(!crksIsAdmin())return alert('Solo la cuenta '+CRKS_ADMIN_EMAIL+' puede agregar productos.');
+  var name=(document.getElementById('ap-name')||{}).value||'';name=name.trim();if(!name)return alert('Pon el nombre de la prenda, Ej: Ref. NUEVA');
+  var desc=(document.getElementById('ap-desc')||{}).value||'';var price=(document.getElementById('ap-price')||{}).value||'';
+  var fileEl=document.getElementById('ap-photo');var file=fileEl&&fileEl.files&&fileEl.files[0]?fileEl.files[0]:null;
+  var photo='';if(file){try{photo=await up(file);}catch(e){photo='';}}
+  var p={name:name,desc:desc,price:price,img:photo,created_at:new Date().toISOString()};
+  var arr=crksGetAdminProducts();arr.push(p);try{localStorage.setItem('crks_products_admin',JSON.stringify(arr));}catch(e){}
+  try{await sb.from('products').insert({name:name,description:desc,price:price,image_url:photo});}catch(e){}
+  alert('Prenda guardada. Ya aparece en Merch para todos.');render();
+}
+function crksDeleteAdminProduct(idx){
+  if(!crksIsAdmin())return alert('Solo la cuenta '+CRKS_ADMIN_EMAIL+' puede borrar productos.');
+  if(!confirm('¿Borrar esta prenda de Merch?'))return;var arr=crksGetAdminProducts();arr.splice(idx,1);try{localStorage.setItem('crks_products_admin',JSON.stringify(arr));}catch(e){}render();
+}
+function crksMerchCopy(name){
+  var n=String(name||'').toUpperCase();
+  if(n.includes('AURORA'))return {tag:'AMANECE Y ENTRENA',line:'Para los que madrugan cuando todos duermen.',story:'Aurora es el primer rayo del día. La que te pones cuando suena la alarma, cuando nadie te ve, cuando el esfuerzo es solo tuyo. Si madrugas para entrenar, esta es tu identidad.'};
+  if(n.includes('CROMO'))return {tag:'FUERZA Y CARÁCTER',line:'Para los que no se rompen, se templan.',story:'Cromo es acero, es carácter. La que te pones para cargar más, para aguantar un kilómetro más, para demostrarte que puedes. No es una camiseta, es tu armadura de Crack.'};
+  if(n.includes('LAVA'))return {tag:'PASIÓN QUE QUEMA',line:'Para los que entrenan con el corazón encendido.',story:'Lava es fuego que no se apaga. La que te pones cuando el entreno duele pero sigues, cuando el grupo te empuja, cuando cruzas la meta y sabes que valió todo. Si llevas CRKS en el pecho, llevas fuego.'};
+  return {tag:'IDENTIDAD CRKS',line:'Hecha para entrenar, hecha para pertenecer.',story:'No es solo una prenda. Es la forma de decir: yo soy CRKS, yo entreno, yo pertenezco a esta comunidad que no se rinde.'};
+}
+V.tienda=async()=>{
+  // Productos: 1) las 3 oficiales, 2) las de Admin en local, 3) las de Supabase products si existen
+  var base=[];try{base=(typeof MERCH!=='undefined'?MERCH:[]).map(function(m){return {name:m.name,desc:m.desc,img:m.img,price:m.price||'',from:'oficial'};});}catch(e){}
+  var adminLocal=crksGetAdminProducts().map(function(p){return {name:p.name,desc:p.desc,img:p.img,price:p.price||'',from:'admin-local'};});
+  var sbProducts=[];try{var _rp=await sb.from('products').select('*').order('created_at',{ascending:false}).limit(50);if(!_rp.error&&_rp.data)sbProducts=_rp.data.filter(function(r){return r&&r.name&&!base.some(function(b){return b.name===r.name;})&&!adminLocal.some(function(a){return a.name===r.name;});}).map(function(r){return {name:r.name,desc:r.description||r.desc||'',img:r.image_url||r.img||'',price:r.price||'',from:'supabase'};});}catch(e){}
+  var all=base.concat(adminLocal, sbProducts);
+  var cards=all.map(function(m,idx){
+    var copy=crksMerchCopy(m.name);
+    var isAdminLocal=m.from==='admin-local';
+    var adminIdx=isAdminLocal?(idx-base.length):-1;
+    var imgHtml=m.img?'<img loading="lazy" decoding="async" src="'+esc(m.img)+'" style="width:100%;height:340px;object-fit:cover;border-radius:16px 16px 0 0;display:block" alt="'+esc(m.name)+'">':'<div style="height:200px;background:linear-gradient(180deg,#1a2a00,#111);display:flex;align-items:center;justify-content:center;font-size:64px;border-radius:16px 16px 0 0">👕</div>';
+    return '<div class=card style="padding:0;overflow:hidden;border:1px solid #333;background:#111"><div style="position:relative">'+imgHtml+'<div style="position:absolute;top:12px;left:12px;background:#A6FF00;color:#000;font-size:11px;font-weight:900;letter-spacing:1px;padding:6px 10px;border-radius:999px">OFICIAL CRKS ⚡</div><div style="position:absolute;top:12px;right:12px;background:rgba(0,0,0,.75);color:#fff;font-size:11px;font-weight:800;padding:6px 10px;border-radius:999px">'+esc(copy.tag)+'</div></div><div style="padding:16px"><h3 style="margin:0;font-size:1.25rem;line-height:1.2">'+esc(m.name)+'</h3><p style="font-weight:800;color:#A6FF00;margin:6px 0 4px;font-size:13px">'+esc(copy.line)+'</p><p class=m style="line-height:1.5;margin:0">'+esc(copy.story)+'</p>'+(m.desc?'<p class=m style="margin:8px 0 0;font-size:12px">• '+esc(m.desc)+'</p>':'')+(m.price?'<p style="margin:8px 0 0"><b>Precio: '+esc(m.price)+'</b></p>':'')+'<a href="'+crksWaLinkFor(m.name)+'" target="_blank" style="display:block;text-align:center;background:#25D366;color:#fff;padding:14px 16px;border-radius:999px;text-decoration:none;font-weight:900;font-size:15px;margin-top:14px">Quiero la mía 💬 → WhatsApp</a><small class=m style="display:block;text-align:center;margin-top:8px">Te atiende CRKS por WhatsApp. Pregunta talla y color.</small>'+(isAdminLocal&&crksIsAdmin()?'<button class=g style="width:100%;margin-top:8px;color:#ff6b6b" onclick="crksDeleteAdminProduct('+adminIdx+')">Borrar prenda (Admin)</button>':'')+'</div></div>';
+  }).join('');
+  var hero='<div style="text-align:center;padding:18px 10px 6px"><div style="font-size:11px;letter-spacing:3px;color:#A6FF00;font-weight:900">MERCH OFICIAL ⚡ COMUNIDAD CRKS</div><h1 style="font-size:2rem;line-height:1.05;margin:10px 0 6px">VISTE COMO<br><span style="color:#A6FF00">UN CRACK.</span></h1><p style="font-size:15px;line-height:1.5;opacity:.9;max-width:420px;margin:0 auto">No es ropa. Es identidad.<br>Cuando te pones CRKS, te pones esfuerzo, comunidad y orgullo.<br>La gente lo nota antes de que digas una palabra.</p><div style="display:flex;gap:8px;justify-content:center;margin:14px 0;flex-wrap:wrap"><span style="background:#1a1a1a;border:1px solid #333;border-radius:999px;padding:7px 12px;font-size:12px;font-weight:700">🔥 Entrena con identidad</span><span style="background:#1a1a1a;border:1px solid #333;border-radius:999px;padding:7px 12px;font-size:12px;font-weight:700">🤝 Pertenece al club</span><span style="background:#1a1a1a;border:1px solid #333;border-radius:999px;padding:7px 12px;font-size:12px;font-weight:700">🏅 Representa en cada salida</span></div></div>';
+  var pillars='<div class=card style="background:linear-gradient(180deg,#1a2a00,#111);border:1px solid #A6FF00"><h3 style="margin-top:0">¿Por qué vestir CRKS?</h3><p style="line-height:1.6"><b>1. Identidad.</b> No eres uno más entrenando. Eres un Crack. La prenda lo dice por ti.</p><p style="line-height:1.6"><b>2. Comunidad.</b> En cada rodada, en cada 10K, en cada Trail, nos reconocemos. Te ven y saben: ese es de los nuestros.</p><p style="line-height:1.6"><b>3. Esfuerzo que se ve.</b> Cada kilómetro que sumas merece verse. Vístelo con orgullo.</p><p class=m style="margin-bottom:0">Elige tu referencia abajo y pide la tuya por WhatsApp. Nosotros te confirmamos talla y color.</p></div>';
+  var adminHint=crksIsAdmin()?'<div class=card style="border:1px solid #A6FF00"><b>👑 Eres Admin ('+CRKS_ADMIN_EMAIL+')</b><p class=m style="margin:6px 0">Puedes agregar más prendas desde Admin. Aparecen aquí para todos.</p><button class=g onclick="go(\'admin\')">Ir a Admin →</button></div>':'';
+  var empty=all.length?cards:'<p class=m>Aún no hay prendas. Pronto llegan las oficiales.</p>';
+  return '<h2 style="text-align:center;margin:6px 0">Merch ⚡</h2>'+hero+pillars+adminHint+'<h3 style="margin:16px 0 12px">Nuestras prendas</h3>'+empty+'<div class=card style=text-align:center><b>¿Dudas de tallas o colores?</b><p class=m style="margin:6px 0">Escríbenos, te ayudamos a elegir la tuya.</p><a href="https://wa.me/573132019383?text='+encodeURIComponent('Hola CRKS, quiero info de Merch. ¿Qué tallas y colores tienen?')+'" target="_blank" style="background:#25D366;color:#fff;padding:13px 20px;border-radius:999px;text-decoration:none;font-weight:900;display:inline-block">Hablar por WhatsApp 💬</a></div>';
+};
+// === ADMIN V15: solo runcrackscolombia@gmail.com agrega productos, retos y eventos ===
+const _origAdminForV15=V.admin;
+V.admin=()=>{
+  if(!crksIsAdmin()){
+    return '<h2>Admin</h2><div class=card><h3>Solo para Admin</h3><p class=m>Esta sección es solo para la cuenta oficial del club.</p><p>Cuenta Admin: <b>'+CRKS_ADMIN_EMAIL+'</b></p><p class=m>Si eres tú, entra con esa cuenta. Si no, sigue disfrutando Merch, Retos y Eventos.</p><button class=g onclick="go(\'tienda\')">Ir a Merch ⚡</button></div>';
+  }
+  var adminProducts=crksGetAdminProducts();
+  var retosAdmin=[];try{retosAdmin=JSON.parse(localStorage.getItem('crks_retos_admin')||'[]');}catch(e){}
+  var eventosAdmin=[];try{eventosAdmin=JSON.parse(localStorage.getItem('crks_eventos_admin')||'[]');}catch(e){}
+  var html='<h2>Admin 👑</h2><p class=m>Conectado como <b>'+esc(me.email||'')+'</b> · Solo esta cuenta puede agregar productos, retos y eventos.</p>';
+  html+='<div class=card style=border:2px solid #A6FF00><h3>👕 Agregar producto a Merch</h3><label class=m>Nombre de la prenda</label><input id=ap-name placeholder="Ej: Ref. NUEVA"><label class=m>Descripción</label><textarea id=ap-desc placeholder="Ej: Diseño exclusivo, personalizable"></textarea><label class=m>Precio (opcional)</label><input id=ap-price placeholder="Ej: $70.000"><label class=m>📷 Foto de la prenda</label><input id=ap-photo type=file accept="image/*"><button class=l-btn-primary style=width:100%;padding:13px;margin-top:8px onclick="crksAddProductAdmin()">Guardar prenda en Merch</button><small class=m>Al guardarla, aparece en Merch para todos, con su botón Quiero la mía → WhatsApp.</small></div>';
+  html+='<div class=card><h3>👕 Prendas agregadas por Admin ('+adminProducts.length+')</h3>'+(adminProducts.map(function(p,i){return '<div class=row style=align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #222"><span style="flex:1"><b>'+esc(p.name)+'</b><br><span class=m>'+esc(p.desc||'')+'</span></span><button class=g onclick="crksDeleteAdminProduct('+i+')">Borrar</button></div>';}).join('')||'<p class=m>Aún no has agregado prendas. Las 3 oficiales (Aurora, Cromo, Lava) ya están en Merch.</p>')+'</div>';
+  html+='<div class=card><h3>🏆 Agregar Reto</h3><input id=rt placeholder="Título"><textarea id=rd placeholder="Descripción"></textarea><input id=rm type=number placeholder="Meta"><button onclick="saveRetoAdmin()">Guardar Reto</button><p class=m style=margin-top:8px>Retos guardados: '+retosAdmin.length+'. Aparecen en Retos para todos.</p></div>';
+  html+='<div class=card><h3>🌕 Agregar Evento</h3><input id=et placeholder="Título"><textarea id=ed placeholder="Descripción"></textarea><input id=edt type=datetime-local><input id=ep placeholder="Lugar"><input id=epr placeholder="Precio"><button onclick="saveEventoAdmin()">Guardar Evento</button><p class=m style=margin-top:8px>Eventos guardados: '+eventosAdmin.length+'. Aparecen en Eventos como EVENTO OFICIAL.</p></div>';
+  html+='<div class=card><p class=m>Para borrar un evento de prueba guardado aquí, ve a Eventos si eres Admin o borra desde el navegador: <code>localStorage.removeItem("crks_eventos_admin")</code></p></div>';
+  return html;
+};
+</script>
 </body></html>
