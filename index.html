@@ -938,4 +938,334 @@ V.eventos=async()=>{
   return '<h2>Eventos</h2><p class=m>Eventos oficiales CRKS. Separa tu cupo con 50% o asegúralo con inscripción completa.</p>'+adminBar+mandalay+'<h3 style=margin:16px 0 10px>Próximos eventos oficiales</h3>'+(otros||empty);
 };
 </script>
+
+<script>
+// === EVENTOS V17 - Triple guardado para que TODOS lo vean + Borrar todo + Compartir con foto ===
+async function crksDataUrlToFile(dataUrl, name){
+  try{
+    var res=await fetch(dataUrl);var blob=await res.blob();return new File([blob], name||'evento.jpg',{type:blob.type||'image/jpeg'});
+  }catch(e){return null;}
+}
+async function crksShareEvento(title, desc, place, price, whenTxt, img){
+  var text='⚡ EVENTO OFICIAL CRKS ⚡\n\n'+title+'\n'+(desc||'')+'\n📍 '+(place||'')+(whenTxt?' · '+whenTxt:'')+'\n💰 '+(price||'Ver precio')+'\n\nSepara tu cupo con Pre-inscripción 50% o asegúralo con Inscribirme.\nEscríbenos: https://wa.me/573132019383';
+  // 1) Compartir nativo con foto si se puede
+  try{
+    if(navigator.share){
+      if(img&&img.startsWith('data:')&&navigator.canShare){
+        var f=await crksDataUrlToFile(img,'evento-crks.jpg');
+        if(f&&navigator.canShare({files:[f]})){
+          await navigator.share({title:title,text:text,files:[f]});
+          return;
+        }
+      }
+      await navigator.share({title:title,text:text,url:'https://wa.me/573132019383'});
+      return;
+    }
+  }catch(e){ if(String(e&&e.name)==='AbortError')return; }
+  // 2) Fallback WhatsApp compartir (con foto como link si es http)
+  var waText=text+(img&&img.startsWith('http')?'\n📷 Foto: '+img:'');
+  window.open('https://wa.me/?text='+encodeURIComponent(waText),'_blank');
+  try{await navigator.clipboard.writeText(text);}catch(e){}
+}
+// Guardar evento V17: Supabase events + Posts [EVENTO_CRKS] + Local. Si uno falla, el otro sí llega a todos.
+saveEventoAdmin=async function(){
+  if(typeof crksIsAdmin==='function'&&!crksIsAdmin())return alert('Solo la cuenta runcrackscolombia@gmail.com puede agregar eventos.');
+  var title=(document.getElementById('et')||{}).value||'';title=title.trim();if(!title)return alert('Pon título');
+  var desc=(document.getElementById('ed')||{}).value||'';var when=(document.getElementById('edt')||{}).value||'';var place=(document.getElementById('ep')||{}).value||'';var price=(document.getElementById('epr')||{}).value||'';
+  var photo='';
+  try{
+    var fe=document.getElementById('ephoto');if(fe&&fe.files&&fe.files[0])photo=await up(fe.files[0]);
+  }catch(e){photo='';}
+  var local={title:title,desc:desc,when:when,place:place,price:price,img:photo,created_at:new Date().toISOString()};
+  var arr=[];try{arr=JSON.parse(localStorage.getItem('crks_eventos_admin')||'[]');}catch(e){}arr.push(local);try{localStorage.setItem('crks_eventos_admin',JSON.stringify(arr));}catch(e){}
+  var errEvents=null, errPosts=null;
+  try{
+    var r1=await sb.from('events').insert({title:title,description:desc,starts_at:when?new Date(when).toISOString():null,place:place,price:price,image_url:photo||null});
+    if(r1.error)errEvents=r1.error;
+  }catch(e){errEvents=e;}
+  // Posts es la tabla que YA funciona para que todos vean Entrenos. Guardamos el evento también ahí como respaldo visible.
+  try{
+    var body='[EVENTO_CRKS] '+title+'\n'+desc+'\nLugar: '+place+'\nFecha: '+(when||'')+'\nPrecio: '+price;
+    var r2=await sb.from('posts').insert({user_id:me.id,sport:'Evento',body:body,image_url:photo||null,km:0});
+    if(r2.error)errPosts=r2.error;
+  }catch(e){errPosts=e;}
+  if(errEvents&&errPosts){
+    alert('Se guardó solo en tu celular.\n\nSupabase bloqueó el guardado.\nEvents: '+(errEvents.message||errEvents)+'\nPosts: '+(errPosts.message||errPosts)+'\n\nPega el SQL de abajo en Supabase para que todos lo vean.');
+  } else if(errEvents){
+    alert('Evento guardado ✅\n\nSe guardó en Posts para que TODOS lo vean, aunque la tabla events falló: '+(errEvents.message||errEvents));
+  } else {
+    alert('Evento publicado ✅ Ya aparece en Eventos para todos.');
+  }
+  render();
+};
+async function crksDeleteEventoByTitleV17(title, sbId, postId){
+  if(typeof crksIsAdmin==='function'&&!crksIsAdmin())return alert('Solo la cuenta runcrackscolombia@gmail.com puede borrar eventos.');
+  if(!confirm('¿Borrar el evento "'+title+'"?'))return;
+  if(sbId){try{await sb.from('events').delete().eq('id',sbId);}catch(e){}}
+  if(postId){try{await sb.from('likes').delete().eq('post_id',postId);}catch(e){}try{await sb.from('comments').delete().eq('post_id',postId);}catch(e){}try{await sb.from('posts').delete().eq('id',postId);}catch(e){}}
+  try{var arr=JSON.parse(localStorage.getItem('crks_eventos_admin')||'[]').filter(function(x){return String(x.title)!==String(title);});localStorage.setItem('crks_eventos_admin',JSON.stringify(arr));}catch(e){}
+  // Si no había postId, buscar posts con ese título y borrarlos
+  try{
+    var _all=await sb.from('posts').select('id,body').ilike('body','%[EVENTO_CRKS] '+title+'%').limit(5);
+    if(_all.data)for(var i=0;i<_all.data.length;i++){try{await sb.from('likes').delete().eq('post_id',_all.data[i].id);}catch(e){}try{await sb.from('comments').delete().eq('post_id',_all.data[i].id);}catch(e){}try{await sb.from('posts').delete().eq('id',_all.data[i].id);}catch(e){}}
+  }catch(e){}
+  render();
+}
+// BORRAR TODOS: events + posts [EVENTO_CRKS] + local. Queda solo Mandalay (fijo en código).
+async function crksClearEventosPrueba(){
+  if(typeof crksIsAdmin==='function'&&!crksIsAdmin())return alert('Solo la cuenta runcrackscolombia@gmail.com puede borrar eventos.');
+  if(!confirm('¿Borrar TODOS los eventos publicados? Queda solo Reto Mandalay.'))return;
+  try{localStorage.removeItem('crks_eventos_admin');}catch(e){}
+  var n1=0,n2=0;
+  try{var _e=await sb.from('events').select('id');if(!_e.error&&_e.data){for(var i=0;i<_e.data.length;i++){var rr=await sb.from('events').delete().eq('id',_e.data[i].id);if(!rr.error)n1++;}}}catch(e){}
+  try{
+    var _p=await sb.from('posts').select('id,body').ilike('body','%[EVENTO_CRKS]%').limit(100);
+    if(_p.data)for(var j=0;j<_p.data.length;j++){try{await sb.from('likes').delete().eq('post_id',_p.data[j].id);}catch(e){}try{await sb.from('comments').delete().eq('post_id',_p.data[j].id);}catch(e){}var rp=await sb.from('posts').delete().eq('id',_p.data[j].id);if(!rp.error)n2++;}
+  }catch(e){}
+  // También limpiar posts con body que empiece por [EVENTO] viejo
+  try{var _p2=await sb.from('posts').select('id,body').ilike('body','%[EVENTO]%').limit(100);if(_p2.data)for(var k=0;k<_p2.data.length;k++){try{await sb.from('posts').delete().eq('id',_p2.data[k].id);}catch(e){}}}catch(e){}
+  alert('Borrado ✅\nEvents borrados: '+n1+'\nPosts-eventos borrados: '+n2+'\nQueda solo Reto Mandalay.\n\nSi algún evento sigue apareciendo, es porque quedó en el localStorage de OTRO celular. Ese usuario debe entrar a Eventos y darle a Borrar todo desde su Admin, o borrar caché.');
+  render();
+}
+// Compat: el botón viejo llamaba a crksDeleteEventoByTitle, ahora redirige a V17
+crksDeleteEventoByTitle=crksDeleteEventoByTitleV17;
+V.eventos=async()=>{
+  var isAdm=(typeof crksIsAdmin==='function')?crksIsAdmin():false;
+  var sbEvents=[];try{var _re=await sb.from('events').select('*').order('created_at',{ascending:false}).limit(50);if(!_re.error&&_re.data)sbEvents=_re.data;}catch(e){}
+  var postEvents=[];try{var _rp=await sb.from('posts').select('id,body,image_url,created_at').ilike('body','%[EVENTO_CRKS]%').order('created_at',{ascending:false}).limit(50);if(!_rp.error&&_rp.data)postEvents=_rp.data;}catch(e){}
+  // Si posts falla con ilike, intentar con getPosts
+  if(!postEvents.length){try{var _gp=await getPosts(200);postEvents=(_gp||[]).filter(function(p){return (p.body||'').includes('[EVENTO_CRKS]');});}catch(e){}}
+  var localEvents=[];try{localEvents=JSON.parse(localStorage.getItem('crks_eventos_admin')||'[]');}catch(e){}
+  var seen={};var allEvents=[];
+  function parsePostBody(body){
+    var lines=String(body||'').split('\n');var title=lines[0].replace('[EVENTO_CRKS]','').trim();var desc='',place='',when='',price='';
+    lines.forEach(function(l){if(l.startsWith('Lugar:'))place=l.replace('Lugar:','').trim();else if(l.startsWith('Fecha:'))when=l.replace('Fecha:','').trim();else if(l.startsWith('Precio:'))price=l.replace('Precio:','').trim();else if(!l.includes('[EVENTO_CRKS]')&&!l.startsWith('Lugar:')&&!l.startsWith('Fecha:')&&!l.startsWith('Precio:'))desc+=l+' ';});
+    return {title:title,desc:desc.trim(),place:place,when:when,price:price};
+  }
+  sbEvents.forEach(function(r){var key=String(r.title||'').toLowerCase().trim();if(seen[key])return;seen[key]=1;allEvents.push({source:'supabase',sbId:r.id,postId:null,title:r.title||'',desc:r.description||r.desc||'',place:r.place||'',when:r.starts_at||r.when||'',price:r.price||'',img:r.image_url||r.img||'',includes:r.includes||''});});
+  postEvents.forEach(function(p){var parsed=parsePostBody(p.body||'');var key=parsed.title.toLowerCase().trim();if(seen[key]){ // ya existe en events, guardar postId para borrarlo también
+    var ex=allEvents.find(function(x){return x.title.toLowerCase().trim()===key;});if(ex&&!ex.postId)ex.postId=p.id;return;}seen[key]=1;allEvents.push({source:'post',sbId:null,postId:p.id,title:parsed.title,desc:parsed.desc,place:parsed.place,when:parsed.when,price:parsed.price,img:p.image_url||''});});
+  localEvents.forEach(function(r,i){var key=String(r.title||'').toLowerCase().trim();if(seen[key])return;seen[key]=1;allEvents.push({source:'local',localIdx:i,postId:null,title:r.title||'',desc:r.desc||r.description||'',place:r.place||'',when:r.when||r.starts_at||'',price:r.price||'',img:r.img||r.image_url||''});});
+  var mandalay='<div class=card style=border:2px solid #A6FF00;background:linear-gradient(180deg,#1a2a00,#111)><div style=background:#A6FF00;color:#000;padding:6px 10px;border-radius:99px;display:inline-block;font-weight:800;font-size:11px>EVENTO DESTACADO · OFICIAL CRKS</div><h2 style=margin:10px 0 4px>Reto Mandalay</h2><p><b>4 Horas de puro esfuerzo y luz de luna</b></p><div class=oferta style=background:#000;border:1px solid #A6FF00;border-radius:12px;padding:10px>OFERTA: $140.000 <s>$160.000</s> <small>hasta 15 de Enero</small></div><p class=m>Luego sube a $160.000. Asegura tu cupo antes del 15.</p>'+crksEventoButtons('Reto Mandalay','$140.000')+'<button class=g style="width:100%;margin-top:8px" onclick="crksShareEvento(\'Reto Mandalay\',\'4 Horas de puro esfuerzo y luz de luna\',\'Mandalay\',\'$140.000 hasta 15 de Enero, luego $160.000\',\'\',\'\')">📤 Compartir evento</button></div>';
+  var otros=allEvents.map(function(r){
+    var whenTxt='';try{if(r.when)whenTxt=new Date(r.when).toLocaleString('es-CO',{dateStyle:'medium',timeStyle:'short'});}catch(e){whenTxt=r.when||'';}
+    var delBtn=isAdm?'<button class=g style="margin-top:8px;color:#ff6b6b;width:100%" onclick="crksDeleteEventoByTitleV17(\''+esc(r.title).replace(/\'/g,"\\'")+'\',\''+(r.sbId||'')+'\',\''+(r.postId||'')+'\')">Borrar evento (Admin) 🗑️</button>':'';
+    var imgHtml=r.img?'<img loading="lazy" decoding="async" src="'+esc(r.img)+'" style="width:100%;max-height:280px;object-fit:cover;border-radius:12px;margin:8px 0" onclick="window.open(\''+esc(r.img)+'\',\'_blank\')" title="Toca para ver foto completa">':'';
+    var shareBtn='<button class=g style="width:100%;margin-top:8px" onclick="crksShareEvento(\''+esc(r.title).replace(/\'/g,"\\'")+'\',\''+esc(r.desc||'').replace(/\'/g,"\\'")+'\',\''+esc(r.place||'').replace(/\'/g,"\\'")+'\',\''+esc(r.price||'').replace(/\'/g,"\\'")+'\',\''+esc(whenTxt).replace(/\'/g,"\\'")+'\',\''+esc(r.img||'').replace(/\'/g,"\\'")+'\')">📤 Compartir evento con foto</button>';
+    return '<div class=card style=border:2px solid #A6FF00><div style=background:#A6FF00;color:#000;padding:6px 10px;border-radius:99px;display:inline-block;font-weight:800;font-size:11px>EVENTO OFICIAL</div><h2 style=margin:10px 0 4px>'+esc(r.title)+'</h2>'+imgHtml+'<p>'+esc(r.desc||'')+'</p><p class=m>'+esc(r.place||'')+(whenTxt?' · '+esc(whenTxt):'')+'</p>'+(r.includes?'<p class=m>'+esc(r.includes)+'</p>':'')+'<div class=oferta style=background:#000;border:1px solid #A6FF00;border-radius:12px;padding:10px>'+esc(r.price||'Ver precio')+'</div>'+crksEventoButtons(r.title, r.price||'Ver precio')+shareBtn+delBtn+'</div>';
+  }).join('');
+  var adminBar=isAdm?'<div class=card style=border:1px solid #ff6b6b><b>👑 Eres Admin</b><p class=m style=margin:6px 0>Si un evento no le sale a los demás, es porque Supabase bloqueó el guardado. Ahora se guarda en 3 lugares (Events + Posts + Local) para que sí les salga. Si ves eventos de prueba viejos, bórralos aquí.</p><button class=g style="color:#ff6b6b;width:100%" onclick="crksClearEventosPrueba()">Borrar TODOS los eventos publicados 🗑️</button><small class=m>Borra de Events + Posts + tu celular. Queda solo Reto Mandalay. Si un evento sigue en OTRO celular, ese celular debe darle a Borrar todo también.</small></div>':'';
+  var empty=allEvents.length?'':'<p class=m>No hay más eventos por ahora. Solo Reto Mandalay. Pronto llegan nuevos retos.</p>';
+  return '<h2>Eventos</h2><p class=m>Eventos oficiales CRKS. Separa tu cupo con 50% o asegúralo con inscripción completa.</p>'+adminBar+mandalay+'<h3 style=margin:16px 0 10px>Próximos eventos oficiales</h3>'+(otros||empty);
+};
+// Admin V17: agregar foto al evento
+try{
+  var _origAdminV17=V.admin;
+  V.admin=function(){
+    var h=_origAdminV17();
+    if(typeof crksIsAdmin==='function'&&!crksIsAdmin())return h;
+    // Insertar input de foto en el bloque Agregar Evento
+    h=h.replace('<button onclick="saveEventoAdmin()">Guardar Evento</button>','<label class=m>📷 Foto del evento (para compartir)</label><input id=ephoto type=file accept="image/*"><button onclick="saveEventoAdmin()">Guardar Evento</button><small class=m>La foto se ve en Eventos y se comparte con el botón Compartir evento con foto.</small>');
+    // Cambiar texto de borrado viejo por el nuevo
+    h=h.replace('Para borrar un evento de prueba guardado aquí, ve a Eventos si eres Admin o borra desde el navegador: <code>localStorage.removeItem("crks_eventos_admin")</code>','Para borrar TODOS los eventos publicados, ve a Eventos y dale a <b>Borrar TODOS los eventos publicados</b>. Queda solo Reto Mandalay.');
+    return h;
+  };
+}catch(e){}
+</script>
+
+<script>
+// === EVENTOS V18 - Control total + Foto siempre + Precio en 2 etapas + Botones exactos ===
+async function crksFileToDataUrl(f){
+  // Comprime como Entrenos: 800px, 55% y devuelve dataURL. Sirve aunque Storage falle.
+  try{
+    var bmp=await createImageBitmap(f);var max=800;var w=bmp.width,h=bmp.height;
+    if(w>max||h>max){var r=Math.min(max/w,max/h);w=Math.round(w*r);h=Math.round(h*r);}
+    var c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').drawImage(bmp,0,0,w,h);
+    var blob=await new Promise(function(res){c.toBlob(res,'image/jpeg',0.55);});
+    return await new Promise(function(res,rej){var rd=new FileReader();rd.onload=function(){res(rd.result);};rd.onerror=rej;rd.readAsDataURL(blob);});
+  }catch(e){return null;}
+}
+function crksPrecioVigente(ev){
+  // ev: {price, price_pre, price_full, pre_end}
+  var now=new Date();now.setHours(0,0,0,0);
+  var preNum=crksParsePrecioNum(ev.price_pre||ev.price||'');
+  var fullNum=crksParsePrecioNum(ev.price_full||'');
+  var preEnd=ev.pre_end||'';
+  if(preNum!=null&&fullNum!=null&&preEnd){
+    var end=new Date(preEnd);end.setHours(23,59,59,999);
+    if(now<=end)return {vigente:preNum,normal:fullNum,enPreventa:true,fin:preEnd};
+    return {vigente:fullNum,normal:fullNum,enPreventa:false,fin:preEnd};
+  }
+  if(preNum!=null)return {vigente:preNum,normal:preNum,enPreventa:false,fin:preEnd};
+  return {vigente:null,normal:null,enPreventa:false,fin:preEnd};
+}
+function crksEventoButtonsV18(titulo, ev){
+  var p=crksPrecioVigente(ev);
+  var vigenteTxt=p.vigente!=null?crksFmtCOP(p.vigente):(ev.price||'Ver precio');
+  var mitadTxt=p.vigente!=null?crksFmtCOP(Math.round(p.vigente/2)):'50%';
+  var preLink=crksEventoWa(titulo,'pre',vigenteTxt,mitadTxt);
+  var fullLink=crksEventoWa(titulo,'full',vigenteTxt,mitadTxt);
+  // Textos exactos pedidos: Separa tu cupo con el 50% / Asegura tu cupo
+  return '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px">'
+    +'<a href="'+preLink+'" target="_blank" style="text-align:center;background:#111;color:#A6FF00;border:2px solid #A6FF00;padding:12px 8px;border-radius:12px;text-decoration:none;font-weight:900;font-size:13px;line-height:1.35">Separa tu cupo<br>con el 50%<br><span style="font-size:12px;font-weight:800">'+mitadTxt+'</span></a>'
+    +'<a href="'+fullLink+'" target="_blank" style="text-align:center;background:#A6FF00;color:#000;padding:12px 8px;border-radius:12px;text-decoration:none;font-weight:900;font-size:13px;line-height:1.35">Asegura<br>tu cupo<br><span style="font-size:12px;font-weight:800">'+vigenteTxt+'</span></a>'
+    +'</div><small class=m style="display:block;text-align:center;margin-top:6px">Separa con 50% · Asegura con pago completo.</small>';
+}
+function crksPrecioBadge(ev){
+  var p=crksPrecioVigente(ev);
+  if(p.vigente==null)return '<div class=oferta style=background:#000;border:1px solid #A6FF00;border-radius:12px;padding:10px>'+esc(ev.price||'Ver precio')+'</div>';
+  if(p.enPreventa){
+    var finTxt='';try{finTxt=new Date(p.fin).toLocaleDateString('es-CO',{day:'numeric',month:'long',year:'numeric'});}catch(e){finTxt=p.fin;}
+    return '<div class=oferta style=background:#000;border:1px solid #A6FF00;border-radius:12px;padding:10px>PREVENTA: '+crksFmtCOP(p.vigente)+' <s>'+crksFmtCOP(p.normal)+'</s> <small>hasta '+esc(finTxt)+'</small></div><p class=m style=margin:6px 0 0>Preventa hasta '+esc(finTxt)+'. Luego queda en '+crksFmtCOP(p.normal)+'.</p>';
+  }
+  return '<div class=oferta style=background:#000;border:1px solid #A6FF00;border-radius:12px;padding:10px>Precio: '+crksFmtCOP(p.vigente)+'</div><p class=m style=margin:6px 0 0>Preventa terminó. Precio actual: '+crksFmtCOP(p.vigente)+'.</p>';
+}
+// --- Guardar evento V18 con foto garantizada ---
+saveEventoAdmin=async function(){
+  if(typeof crksIsAdmin==='function'&&!crksIsAdmin())return alert('Solo la cuenta runcrackscolombia@gmail.com puede agregar eventos.');
+  var title=(document.getElementById('et')||{}).value||'';title=title.trim();if(!title)return alert('Pon título');
+  var desc=(document.getElementById('ed')||{}).value||'';var when=(document.getElementById('edt')||{}).value||'';var place=(document.getElementById('ep')||{}).value||'';
+  var pricePre=(document.getElementById('eprice-pre')||{}).value||'';var priceFull=(document.getElementById('eprice-full')||{}).value||'';var preEnd=(document.getElementById('epre-end')||{}).value||'';
+  var priceOld=(document.getElementById('epr')||{}).value||'';
+  // Si solo llenó precio viejo, usarlo como preventa y normal
+  if(!pricePre&&priceOld)pricePre=priceOld;
+  if(!priceFull&&priceOld)priceFull=priceOld;
+  var priceDisplay=pricePre||priceOld||'';
+  var photo='';
+  var fe=document.getElementById('ephoto');var file=fe&&fe.files&&fe.files[0]?fe.files[0]:null;
+  if(file){
+    try{photo=await up(file);}catch(e){photo='';}
+    if(!photo){ // Storage falló -> dataURL comprimida, así la foto SÍ se anexa
+      try{photo=await crksFileToDataUrl(file);}catch(e){photo='';}
+    }
+  }
+  if(file&&!photo)return alert('No se pudo anexar la foto. Intenta con otra foto más liviana.');
+  var local={title:title,desc:desc,when:when,place:place,price:priceDisplay,price_pre:pricePre,price_full:priceFull,pre_end:preEnd,img:photo,created_at:new Date().toISOString()};
+  var arr=[];try{arr=JSON.parse(localStorage.getItem('crks_eventos_admin')||'[]');}catch(e){}arr.push(local);try{localStorage.setItem('crks_eventos_admin',JSON.stringify(arr));}catch(e){alert('Local lleno: la foto es muy pesada. Se guardará solo en Supabase.');}
+  var errEvents=null, errPosts=null;
+  try{
+    var r1=await sb.from('events').insert({title:title,description:desc,starts_at:when?new Date(when).toISOString():null,place:place,price:priceDisplay,image_url:photo||null});
+    if(r1.error){
+      // Si events no tiene image_url o price_pre, reintentar sin esos campos
+      var r1b=await sb.from('events').insert({title:title,description:desc,starts_at:when?new Date(when).toISOString():null,place:place,price:priceDisplay});
+      if(r1b.error)errEvents=r1b.error; else errEvents=null;
+    }
+  }catch(e){errEvents=e;}
+  try{
+    var body='[EVENTO_CRKS] '+title+'\n'+desc+'\nLugar: '+place+'\nFecha: '+(when||'')+'\nPrecio: '+priceDisplay+'\nPreventa: '+(pricePre||'')+'\nPrecio normal: '+(priceFull||'')+'\nFin preventa: '+(preEnd||'');
+    var r2=await sb.from('posts').insert({user_id:me.id,sport:'Evento',body:body,km:0,minutes:0,image_url:photo||null});
+    if(r2.error){
+      var r2b=await sb.from('posts').insert({user_id:me.id,sport:'Evento',body:body,km:0,minutes:0});
+      if(r2b.error)errPosts=r2b.error; else errPosts=null;
+    }
+  }catch(e){errPosts=e;}
+  if(errEvents&&errPosts){
+    alert('Se guardó en tu celular, pero Supabase bloqueó ambos guardados.\n\nEvents: '+(errEvents.message||errEvents)+'\nPosts: '+(errPosts.message||errPosts)+'\n\nPega el SQL de abajo en Supabase para que TODOS lo vean.');
+  } else {
+    alert('Evento publicado ✅ Con foto '+(photo?'sí anexada':'sin foto')+'. Ya aparece en Eventos para todos.\n\nSi en otro celular no aparece, ese celular debe recargar forzado y entrar a Eventos.');
+  }
+  render();
+};
+// --- Borrar Mandalay y Borrar todos (control total) ---
+async function crksDeleteMandalay(){
+  if(typeof crksIsAdmin==='function'&&!crksIsAdmin())return alert('Solo la cuenta runcrackscolombia@gmail.com puede borrar eventos.');
+  if(!confirm('¿Borrar Reto Mandalay? Desaparecerá para todos. Puedes restaurarlo desde Admin en Eventos.'))return;
+  try{localStorage.setItem('crks_mandalay_deleted','1');}catch(e){}
+  // Borrar cualquier Mandalay guardado en events/posts/local
+  try{var _e=await sb.from('events').select('id,title').ilike('title','%Mandalay%');if(_e.data)for(var i=0;i<_e.data.length;i++){await sb.from('events').delete().eq('id',_e.data[i].id);}}catch(e){}
+  try{var _p=await sb.from('posts').select('id,body').ilike('body','%Mandalay%').limit(20);if(_p.data)for(var j=0;j<_p.data.length;j++){if((_p.data[j].body||'').includes('[EVENTO_CRKS]')){try{await sb.from('likes').delete().eq('post_id',_p.data[j].id);}catch(e){}try{await sb.from('comments').delete().eq('post_id',_p.data[j].id);}catch(e){}await sb.from('posts').delete().eq('id',_p.data[j].id);}}}catch(e){}
+  try{var arr=JSON.parse(localStorage.getItem('crks_eventos_admin')||'[]').filter(function(x){return !(String(x.title||'').toLowerCase().includes('mandalay'));});localStorage.setItem('crks_eventos_admin',JSON.stringify(arr));}catch(e){}
+  alert('Reto Mandalay borrado ✅');render();
+}
+async function crksRestoreMandalay(){
+  if(typeof crksIsAdmin==='function'&&!crksIsAdmin())return;
+  try{localStorage.removeItem('crks_mandalay_deleted');}catch(e){}
+  alert('Reto Mandalay restaurado ✅');render();
+}
+async function crksClearEventosPrueba(){
+  if(typeof crksIsAdmin==='function'&&!crksIsAdmin())return alert('Solo la cuenta runcrackscolombia@gmail.com puede borrar eventos.');
+  if(!confirm('¿Borrar TODOS los eventos publicados, INCLUIDO Reto Mandalay?'))return;
+  try{localStorage.removeItem('crks_eventos_admin');}catch(e){}
+  try{localStorage.setItem('crks_mandalay_deleted','1');}catch(e){}
+  var n1=0,n2=0;
+  try{var _e=await sb.from('events').select('id');if(!_e.error&&_e.data){for(var i=0;i<_e.data.length;i++){var rr=await sb.from('events').delete().eq('id',_e.data[i].id);if(!rr.error)n1++;}}}catch(e){}
+  try{
+    // Primero por getPosts para no depender de ilike
+    var _gp=await getPosts(200);var evs=(_gp||[]).filter(function(p){return (p.body||'').includes('[EVENTO_CRKS]');});
+    for(var j=0;j<evs.length;j++){try{await sb.from('likes').delete().eq('post_id',evs[j].id);}catch(e){}try{await sb.from('comments').delete().eq('post_id',evs[j].id);}catch(e){}var rp=await sb.from('posts').delete().eq('id',evs[j].id);if(!rp.error)n2++;}
+    // Respaldo por ilike
+    var _p=await sb.from('posts').select('id,body').ilike('body','%[EVENTO_CRKS]%').limit(100);
+    if(_p.data)for(var k=0;k<_p.data.length;k++){try{await sb.from('posts').delete().eq('id',_p.data[k].id);}catch(e){}}
+  }catch(e){}
+  alert('Borrado TOTAL ✅\nEvents borrados: '+n1+'\nPosts-eventos borrados: '+n2+'\nSe borró también Reto Mandalay. Puedes restaurarlo desde Admin.');
+  render();
+}
+// Sobrescribir el botón viejo de borrar uno para que también respete Mandalay
+crksDeleteEventoByTitle=crksDeleteEventoByTitleV17;
+V.eventos=async()=>{
+  var isAdm=(typeof crksIsAdmin==='function')?crksIsAdmin():false;
+  var mandalayDeleted=false;try{mandalayDeleted=localStorage.getItem('crks_mandalay_deleted')==='1';}catch(e){}
+  var sbEvents=[];try{var _re=await sb.from('events').select('*').order('created_at',{ascending:false}).limit(50);if(!_re.error&&_re.data)sbEvents=_re.data;}catch(e){}
+  var postEvents=[];try{var _gp=await getPosts(200);postEvents=(_gp||[]).filter(function(p){return (p.body||'').includes('[EVENTO_CRKS]');});}catch(e){}
+  if(!postEvents.length){try{var _rp=await sb.from('posts').select('id,body,image_url,created_at').ilike('body','%[EVENTO_CRKS]%').order('created_at',{ascending:false}).limit(50);if(!_rp.error&&_rp.data)postEvents=_rp.data;}catch(e){}}
+  var localEvents=[];try{localEvents=JSON.parse(localStorage.getItem('crks_eventos_admin')||'[]');}catch(e){}
+  var seen={};var allEvents=[];
+  function parsePostBody(body){
+    var lines=String(body||'').split('\n');var title=lines[0].replace('[EVENTO_CRKS]','').trim();var desc='',place='',when='',price='',pricePre='',priceFull='',preEnd='';
+    lines.forEach(function(l){if(l.startsWith('Lugar:'))place=l.replace('Lugar:','').trim();else if(l.startsWith('Fecha:'))when=l.replace('Fecha:','').trim();else if(l.startsWith('Precio:'))price=l.replace('Precio:','').trim();else if(l.startsWith('Preventa:'))pricePre=l.replace('Preventa:','').trim();else if(l.startsWith('Precio normal:'))priceFull=l.replace('Precio normal:','').trim();else if(l.startsWith('Fin preventa:'))preEnd=l.replace('Fin preventa:','').trim();else if(!l.includes('[EVENTO_CRKS]')&&!l.startsWith('Lugar:')&&!l.startsWith('Fecha:')&&!l.startsWith('Precio:')&&!l.startsWith('Preventa:')&&!l.startsWith('Precio normal:')&&!l.startsWith('Fin preventa:'))desc+=l+' ';});
+    return {title:title,desc:desc.trim(),place:place,when:when,price:price,price_pre:pricePre,price_full:priceFull,pre_end:preEnd};
+  }
+  sbEvents.forEach(function(r){var key=String(r.title||'').toLowerCase().trim();if(seen[key])return;seen[key]=1;allEvents.push({source:'supabase',sbId:r.id,postId:null,title:r.title||'',desc:r.description||r.desc||'',place:r.place||'',when:r.starts_at||r.when||'',price:r.price||'',price_pre:r.price_pre||r.price||'',price_full:r.price_full||r.price||'',pre_end:r.pre_end||'',img:r.image_url||r.img||'',includes:r.includes||''});});
+  postEvents.forEach(function(p){var parsed=parsePostBody(p.body||'');var key=parsed.title.toLowerCase().trim();if(seen[key]){var ex=allEvents.find(function(x){return x.title.toLowerCase().trim()===key;});if(ex){if(!ex.postId)ex.postId=p.id;if(!ex.img&&p.image_url)ex.img=p.image_url;if(!ex.price_pre&&parsed.price_pre)ex.price_pre=parsed.price_pre;if(!ex.price_full&&parsed.price_full)ex.price_full=parsed.price_full;if(!ex.pre_end&&parsed.pre_end)ex.pre_end=parsed.pre_end;}return;}seen[key]=1;allEvents.push({source:'post',sbId:null,postId:p.id,title:parsed.title,desc:parsed.desc,place:parsed.place,when:parsed.when,price:parsed.price,price_pre:parsed.price_pre,price_full:parsed.price_full,pre_end:parsed.pre_end,img:p.image_url||''});});
+  localEvents.forEach(function(r,i){var key=String(r.title||'').toLowerCase().trim();if(seen[key]){var ex2=allEvents.find(function(x){return x.title.toLowerCase().trim()===key;});if(ex2&&!ex2.img&&r.img)ex2.img=r.img;return;}seen[key]=1;allEvents.push({source:'local',localIdx:i,postId:null,title:r.title||'',desc:r.desc||r.description||'',place:r.place||'',when:r.when||r.starts_at||'',price:r.price||'',price_pre:r.price_pre||r.price||'',price_full:r.price_full||r.price||'',pre_end:r.pre_end||'',img:r.img||r.image_url||''});});
+  // Si Mandalay está en allEvents, quitarlo de la lista normal para mostrarlo como destacado o borrarlo
+  var mandalayFromList=allEvents.find(function(x){return x.title.toLowerCase().includes('mandalay');});
+  allEvents=allEvents.filter(function(x){return !x.title.toLowerCase().includes('mandalay');});
+  var mandalayEv={title:'Reto Mandalay',desc:'4 Horas de puro esfuerzo y luz de luna',place:'Mandalay',price:'$140.000',price_pre:'$140.000',price_full:'$160.000',pre_end:'2026-01-15',img:''};
+  if(mandalayFromList){mandalayEv=mandalayFromList;if(!mandalayEv.price_pre)mandalayEv.price_pre='$140.000';if(!mandalayEv.price_full)mandalayEv.price_full='$160.000';if(!mandalayEv.pre_end)mandalayEv.pre_end='2026-01-15';}
+  var mandalayHtml='';
+  if(!mandalayDeleted){
+    mandalayHtml='<div class=card style=border:2px solid #A6FF00;background:linear-gradient(180deg,#1a2a00,#111)><div style=background:#A6FF00;color:#000;padding:6px 10px;border-radius:99px;display:inline-block;font-weight:800;font-size:11px>EVENTO DESTACADO · OFICIAL CRKS</div><h2 style=margin:10px 0 4px>Reto Mandalay</h2><p><b>4 Horas de puro esfuerzo y luz de luna</b></p>'+crksPrecioBadge(mandalayEv)+crksEventoButtonsV18('Reto Mandalay',mandalayEv)+'<button class=g style="width:100%;margin-top:8px" onclick="crksShareEvento(\'Reto Mandalay\',\'4 Horas de puro esfuerzo y luz de luna\',\'Mandalay\',\'$140.000 hasta 15 de Enero, luego $160.000\',\'\',\'\')">📤 Compartir evento</button>'+(isAdm?'<button class=g style="width:100%;margin-top:8px;color:#ff6b6b" onclick="crksDeleteMandalay()">Borrar Reto Mandalay (Admin) 🗑️</button>':'')+'</div>';
+  } else if(isAdm){
+    mandalayHtml='<div class=card style=border:1px dashed #ff6b6b><b>Reto Mandalay está borrado</b><p class=m style=margin:6px 0>No aparece para nadie. Puedes restaurarlo.</p><button class=g onclick="crksRestoreMandalay()">Restaurar Reto Mandalay</button></div>';
+  }
+  var otros=allEvents.map(function(r){
+    var whenTxt='';try{if(r.when)whenTxt=new Date(r.when).toLocaleString('es-CO',{dateStyle:'medium',timeStyle:'short'});}catch(e){whenTxt=r.when||'';}
+    var delBtn=isAdm?'<button class=g style="margin-top:8px;color:#ff6b6b;width:100%" onclick="crksDeleteEventoByTitleV17(\''+esc(r.title).replace(/\'/g,"\\'")+'\',\''+(r.sbId||'')+'\',\''+(r.postId||'')+'\')">Borrar evento (Admin) 🗑️</button>':'';
+    var imgHtml=r.img?'<img loading="lazy" decoding="async" src="'+esc(r.img)+'" style="width:100%;max-height:280px;object-fit:cover;border-radius:12px;margin:8px 0" onclick="window.open(\''+esc(r.img)+'\',\'_blank\')" title="Toca para ver foto completa">':'<p class=m style="font-size:12px">Sin foto. Agrega foto desde Admin al crear el evento.</p>';
+    var shareBtn='<button class=g style="width:100%;margin-top:8px" onclick="crksShareEvento(\''+esc(r.title).replace(/\'/g,"\\'")+'\',\''+esc(r.desc||'').replace(/\'/g,"\\'")+'\',\''+esc(r.place||'').replace(/\'/g,"\\'")+'\',\''+esc(r.price||'').replace(/\'/g,"\\'")+'\',\''+esc(whenTxt).replace(/\'/g,"\\'")+'\',\''+esc(r.img||'').replace(/\'/g,"\\'")+'\')">📤 Compartir evento con foto</button>';
+    return '<div class=card style=border:2px solid #A6FF00><div style=background:#A6FF00;color:#000;padding:6px 10px;border-radius:99px;display:inline-block;font-weight:800;font-size:11px>EVENTO OFICIAL</div><h2 style=margin:10px 0 4px>'+esc(r.title)+'</h2>'+imgHtml+'<p>'+esc(r.desc||'')+'</p><p class=m>'+esc(r.place||'')+(whenTxt?' · '+esc(whenTxt):'')+'</p>'+(r.includes?'<p class=m>'+esc(r.includes)+'</p>':'')+crksPrecioBadge(r)+crksEventoButtonsV18(r.title,r)+shareBtn+delBtn+'</div>';
+  }).join('');
+  var adminBar=isAdm?'<div class=card style=border:1px solid #ff6b6b><b>👑 Eres Admin · Control total</b><p class=m style=margin:6px 0>Ahora SÍ puedes borrar TODO, incluido Reto Mandalay. Si un evento no le sale a los demás, es Supabase bloqueando. Ya se guarda en 3 lugares. Si sigue sin salir, pega el SQL de abajo.</p><button class=g style="color:#ff6b6b;width:100%" onclick="crksClearEventosPrueba()">Borrar TODOS los eventos publicados 🗑️</button><small class=m>Borra Events + Posts-eventos + tu celular + Mandalay. Puedes restaurar Mandalay desde aquí.</small>'+(mandalayDeleted?'<button class=g style="width:100%;margin-top:8px" onclick="crksRestoreMandalay()">Restaurar Reto Mandalay</button>':'')+'</div>':'';
+  var empty=allEvents.length?'':'<p class=m>No hay más eventos por ahora. Pronto llegan nuevos retos.</p>';
+  return '<h2>Eventos</h2><p class=m>Eventos oficiales CRKS. Separa tu cupo con el 50% o asegúralo con pago completo.</p>'+adminBar+mandalayHtml+'<h3 style=margin:16px 0 10px>Próximos eventos oficiales</h3>'+(otros||empty);
+};
+// Admin V18: formulario con 2 etapas + foto
+try{
+  var _origAdminV18=V.admin;
+  V.admin=function(){
+    var h=_origAdminV18();
+    if(typeof crksIsAdmin==='function'&&!crksIsAdmin())return h;
+    // Reemplazar bloque Agregar Evento viejo por el nuevo con 2 etapas
+    var oldStart=h.indexOf('<h3>🌕 Agregar Evento</h3>');
+    if(oldStart!==-1){
+      var oldEnd=h.indexOf('</div>',h.indexOf('Guardar Evento',oldStart));
+      var newBlock='<h3>🌕 Agregar Evento · Precio en 2 etapas + Foto</h3>'
+        +'<label class=m>Título</label><input id=et placeholder="Ej: Reto Mandalay">'
+        +'<label class=m>Descripción</label><textarea id=ed placeholder="Ej: 4 horas de puro esfuerzo y luz de luna"></textarea>'
+        +'<label class=m>Fecha y hora</label><input id=edt type=datetime-local>'
+        +'<label class=m>Lugar</label><input id=ep placeholder="Ej: Mandalay">'
+        +'<label class=m>💰 Precio PREVENTA (Etapa 1) · Ej: 140000</label><input id=eprice-pre placeholder="Ej: 140000">'
+        +'<label class=m>📅 Hasta cuándo es la preventa</label><input id=epre-end type=date>'
+        +'<label class=m>💰 Precio NORMAL (Etapa 2, cuando termina preventa) · Ej: 160000</label><input id=eprice-full placeholder="Ej: 160000">'
+        +'<label class=m>Precio viejo (si lo usabas antes, déjalo vacío)</label><input id=epr placeholder="Dejar vacío si usas preventa + normal">'
+        +'<label class=m>📷 Foto del evento (obligatoria para compartir con foto)</label><input id=ephoto type=file accept="image/*">'
+        +'<button onclick="saveEventoAdmin()">Guardar Evento</button>'
+        +'<small class=m>Ejemplo: Preventa $140.000 hasta 15 de Enero, luego $160.000. El precio cambia SOLO cuando llega esa fecha. Botones: Separa tu cupo con el 50% / Asegura tu cupo.</small>';
+      h=h.slice(0,oldStart)+newBlock+h.slice(oldEnd);
+    }
+    return h;
+  };
+}catch(e){}
+</script>
 </body></html>
