@@ -26,7 +26,7 @@ isAdmin=true;
 
 // === FIX 2: publicar, encuentros, perfil, admin, slide ===
 if(typeof b==='undefined'){var b=[]}
-async function post(){let body=$('#pb').value.trim();if(!body)return alert('Cuentanos que entrenaste');if(!me)return alert('Inicia sesion para publicar');const f=$('#pf').files[0];let image_url=null;try{if(f)image_url=await up(f);}catch(e){image_url=null}const sport=$('#ps')?$('#ps').value:'Running';const km=$('#pk')?+$('#pk').value||0:0;let tiempoTxt=$('#pm')?$('#pm').value.trim():'';let minutes=0;try{minutes=Math.round(parseTiempo(tiempoTxt)||0);}catch(e){minutes=0}const kilos=$('#pkilos')?+$('#pkilos').value||0:0;const pace=$('#ppace')?$('#ppace').value.trim():'';let extra=[];if(kilos)extra.push('Kilos: '+kilos);if(tiempoTxt)extra.push('Tiempo: '+tiempoTxt);if(pace)extra.push('Pace: '+pace);if(extra.length)body=body+'\n['+extra.join(' | ')+']';try{const r=await sb.from('posts').insert({user_id:me.id,body,sport,km,minutes,image_url});if(r.error)throw r.error;}catch(e){try{const r2=await sb.from('posts').insert({user_id:me.id,body,sport,km,minutes});if(r2.error)throw r2.error;}catch(e2){return alert('No se pudo publicar. Pega el SQL de posts. Error: '+e2.message);}}const t0=tab;if($('#pb'))$('#pb').value='';if($('#pk'))$('#pk').value='';if($('#pm'))$('#pm').value='';if($('#pkilos'))$('#pkilos').value='';if($('#ppace'))$('#ppace').value='';if($('#pf'))$('#pf').value='';await loadMe();tab=t0;render();alert('Entreno publicado! Ya quedo guardado.');}
+async function post(){let body=$('#pb').value.trim();if(!body)return alert('Cuentanos que entrenaste');if(!me)return alert('Inicia sesion para publicar');const f=$('#pf').files[0];let image_url=null;try{if(f)image_url=await up(f);}catch(e){image_url=null}const sport=$('#ps')?$('#ps').value:'Running';const km=$('#pk')?+$('#pk').value||0:0;let tiempoTxt=$('#pm')?$('#pm').value.trim():'';let minutes=0;try{minutes=parseTiempo(tiempoTxt)||0;}catch(e){minutes=0}const kilos=$('#pkilos')?+$('#pkilos').value||0:0;const pace=$('#ppace')?$('#ppace').value.trim():'';let extra=[];if(kilos)extra.push('Kilos: '+kilos);if(tiempoTxt)extra.push('Tiempo: '+tiempoTxt);if(pace)extra.push('Pace: '+pace);if(extra.length)body=body+'\n['+extra.join(' | ')+']';try{const r=await sb.from('posts').insert({user_id:me.id,body,sport,km,minutes,image_url});if(r.error)throw r.error;}catch(e){try{const r2=await sb.from('posts').insert({user_id:me.id,body,sport,km,minutes});if(r2.error)throw r2.error;}catch(e2){return alert('No se pudo publicar. Pega el SQL de posts. Error: '+e2.message);}}const t0=tab;if($('#pb'))$('#pb').value='';if($('#pk'))$('#pk').value='';if($('#pm'))$('#pm').value='';if($('#pkilos'))$('#pkilos').value='';if($('#ppace'))$('#ppace').value='';if($('#pf'))$('#pf').value='';await loadMe();tab=t0;render();alert('Entreno publicado! Ya quedo guardado.');}
 async function likeMeet(id){if(!me)return alert('Inicia sesion');try{const r=await sb.from('meetup_going').insert({meetup_id:id,user_id:me.id});if(r.error)throw r.error;alert('Te sumaste!');render()}catch(e){const arr=JSON.parse(localStorage.getItem('crks_meet_likes')||'[]');const k=id+'_'+me.id;if(arr.includes(k)){alert('Ya le diste corazon a este encuentro');return}arr.push(k);localStorage.setItem('crks_meet_likes',JSON.stringify(arr));alert('Corazon! Te sumaste a este encuentro');render()}}
 async function commentMeetShort(id){const body=prompt('Comentario corto, Ej: Yo voy!');if(!body)return;const arr=JSON.parse(localStorage.getItem('crks_meet_comments')||'[]');arr.push({meet:id,name:prof?.name||'Crack',body});localStorage.setItem('crks_meet_comments',JSON.stringify(arr));render()}
 V.meet=async()=>{const ms=await getMeetups();const likes=JSON.parse(localStorage.getItem('crks_meet_likes')||'[]');const cmts=JSON.parse(localStorage.getItem('crks_meet_comments')||'[]');const cards=(ms||[]).map(m=>{const c=cmts.filter(x=>x.meet==m.id);const lc=likes.filter(x=>x.startsWith(m.id+'_')).length;return '<div class=card><h3>'+esc(m.title)+'</h3><p class=m>'+fd(m.starts_at)+' - '+esc(m.place||'')+'</p><div class=row><button onclick="likeMeet(\''+m.id+'\')">❤️ Me sumo ('+lc+')</button><button onclick="commentMeetShort(\''+m.id+'\')">💬 Comentario corto</button><button onclick="shareMeet(\''+m.id+'\',\''+esc(m.title)+'\',\''+esc(m.place||'')+'\',\''+fd(m.starts_at)+'\')">📤 Compartir</button></div><div>'+c.map(x=>'<p><b>'+esc(x.name)+':</b> '+esc(x.body)+'</p>').join('')+'</div>'+((m.user_id==me?.id)?'<button onclick="del(\'meetups\',\''+m.id+'\')">Borrar</button>':'')+'</div>';}).join('')||'<p class=m>Aun no hay encuentros. Propone el primero!</p>';return '<h2>Encuentros</h2><p class=m>Libre para cualquiera. Propone, sumate con corazon y comenta. Asi crece la comunidad.</p><div class=card><h3>Proponer encuentro</h3><input id=mt placeholder="Titulo, Ej: 10k domingo 6am"><input id=mp placeholder="Lugar, Ej: Parque"><input id=md type=datetime-local><button onclick="mk()">Proponer encuentro</button></div>'+cards;};
@@ -206,7 +206,11 @@ V.feed=async()=>{
   </div>
   <h2>Entrenos recientes</h2>${cards}</div>`;
 };
-window.pickSport=(s,btn)=>{const sel=document.getElementById('ps');if(sel)sel.value=s;document.querySelectorAll('.sport-pill').forEach(b=>b.classList.toggle('active',b.dataset.sport==s));};
+window.window.pickSport=function(s,el){var sel=document.getElementById('ps');if(sel)sel.value=s;document.querySelectorAll('.sport-card').forEach(function(c){var on=c.dataset.sport===s;c.classList.toggle('active',on);c.style.border=on?'2px solid #A6FF00':'1px solid #333';c.style.background=on?'#1a2a00':'#111';});document.querySelectorAll('.sport-pill').forEach(function(b){b.classList.toggle('active',b.dataset.sport===s);});function show(id,on){var b=document.getElementById(id);if(b)b.style.display=on?'block':'none';}var isGym=(s==='Gym'||s==='Calistenia');show('muscleBlock',isGym);show('routineBlock',isGym);show('altimetriaBlock',s==='Trail');show('mtbBlock',s==='MTB');show('natacionBlock',s==='Natación');show('kmBlock',!isGym);show('tiempoBlock',true);show('paceBlock',!isGym);var st=document.getElementById('entrenoStatus');if(st)st.textContent='Deporte: '+s;};
+window.pickMuscle=function(m,el){if(el)el.classList.toggle('active');};
+window.pickTerreno=function(m,el){document.querySelectorAll('.terreno-pill').forEach(function(b){b.classList.toggle('active',b===el);});};
+window.pickLugar=function(m,el){if(el)el.classList.toggle('active');};
+
 window.previewEntreno=(inp)=>{const f=inp.files&&inp.files[0];const box=document.getElementById('entrenoPreview');if(!f||!box)return;const url=URL.createObjectURL(f);box.innerHTML=`<img loading="lazy" src="${url}" style="width:100%;border-radius:12px;margin-top:8px">`;};
 async function cmtInline(id){const inp=document.getElementById('cmt-'+id);if(!inp)return;const body=inp.value.trim();if(!body)return;if(!me)return alert('Inicia sesión');try{const r=await sb.from('comments').insert({post_id:id,user_id:me.id,body});if(r.error)throw r.error;render();}catch(e){alert('No se pudo comentar. Error: '+e.message);}}
 async function deletePost(id){if(!confirm('¿Borrar tu entreno?'))return;try{const r=await sb.from('posts').delete().eq('id',id).eq('user_id',me.id);if(r.error)throw r.error;render();}catch(e){alert('No se pudo borrar. Error: '+e.message);}}
@@ -295,7 +299,7 @@ isAdmin=true;
 
 // === FIX 2: publicar, encuentros, perfil, admin, slide ===
 if(typeof b==='undefined'){var b=[]}
-async function post(){let body=$('#pb').value.trim();if(!body)return alert('Cuentanos que entrenaste');if(!me)return alert('Inicia sesion para publicar');const f=$('#pf').files[0];let image_url=null;try{if(f)image_url=await up(f);}catch(e){image_url=null}const sport=$('#ps')?$('#ps').value:'Running';const km=$('#pk')?+$('#pk').value||0:0;let tiempoTxt=$('#pm')?$('#pm').value.trim():'';let minutes=0;try{minutes=Math.round(parseTiempo(tiempoTxt)||0);}catch(e){minutes=0}const kilos=$('#pkilos')?+$('#pkilos').value||0:0;const pace=$('#ppace')?$('#ppace').value.trim():'';let extra=[];if(kilos)extra.push('Kilos: '+kilos);if(tiempoTxt)extra.push('Tiempo: '+tiempoTxt);if(pace)extra.push('Pace: '+pace);if(extra.length)body=body+'\n['+extra.join(' | ')+']';try{const r=await sb.from('posts').insert({user_id:me.id,body,sport,km,minutes,image_url});if(r.error)throw r.error;}catch(e){try{const r2=await sb.from('posts').insert({user_id:me.id,body,sport,km,minutes});if(r2.error)throw r2.error;}catch(e2){return alert('No se pudo publicar. Pega el SQL de posts. Error: '+e2.message);}}const t0=tab;if($('#pb'))$('#pb').value='';if($('#pk'))$('#pk').value='';if($('#pm'))$('#pm').value='';if($('#pkilos'))$('#pkilos').value='';if($('#ppace'))$('#ppace').value='';if($('#pf'))$('#pf').value='';await loadMe();tab=t0;render();alert('Entreno publicado! Ya quedo guardado.');}
+async function post(){let body=$('#pb').value.trim();if(!body)return alert('Cuentanos que entrenaste');if(!me)return alert('Inicia sesion para publicar');const f=$('#pf').files[0];let image_url=null;try{if(f)image_url=await up(f);}catch(e){image_url=null}const sport=$('#ps')?$('#ps').value:'Running';const km=$('#pk')?+$('#pk').value||0:0;let tiempoTxt=$('#pm')?$('#pm').value.trim():'';let minutes=0;try{minutes=parseTiempo(tiempoTxt)||0;}catch(e){minutes=0}const kilos=$('#pkilos')?+$('#pkilos').value||0:0;const pace=$('#ppace')?$('#ppace').value.trim():'';let extra=[];if(kilos)extra.push('Kilos: '+kilos);if(tiempoTxt)extra.push('Tiempo: '+tiempoTxt);if(pace)extra.push('Pace: '+pace);if(extra.length)body=body+'\n['+extra.join(' | ')+']';try{const r=await sb.from('posts').insert({user_id:me.id,body,sport,km,minutes,image_url});if(r.error)throw r.error;}catch(e){try{const r2=await sb.from('posts').insert({user_id:me.id,body,sport,km,minutes});if(r2.error)throw r2.error;}catch(e2){return alert('No se pudo publicar. Pega el SQL de posts. Error: '+e2.message);}}const t0=tab;if($('#pb'))$('#pb').value='';if($('#pk'))$('#pk').value='';if($('#pm'))$('#pm').value='';if($('#pkilos'))$('#pkilos').value='';if($('#ppace'))$('#ppace').value='';if($('#pf'))$('#pf').value='';await loadMe();tab=t0;render();alert('Entreno publicado! Ya quedo guardado.');}
 async function likeMeet(id){if(!me)return alert('Inicia sesion');try{const r=await sb.from('meetup_going').insert({meetup_id:id,user_id:me.id});if(r.error)throw r.error;alert('Te sumaste!');render()}catch(e){const arr=JSON.parse(localStorage.getItem('crks_meet_likes')||'[]');const k=id+'_'+me.id;if(arr.includes(k)){alert('Ya le diste corazon a este encuentro');return}arr.push(k);localStorage.setItem('crks_meet_likes',JSON.stringify(arr));alert('Corazon! Te sumaste a este encuentro');render()}}
 async function commentMeetShort(id){const body=prompt('Comentario corto, Ej: Yo voy!');if(!body)return;const arr=JSON.parse(localStorage.getItem('crks_meet_comments')||'[]');arr.push({meet:id,name:prof?.name||'Crack',body});localStorage.setItem('crks_meet_comments',JSON.stringify(arr));render()}
 V.meet=async()=>{const ms=await getMeetups();const likes=JSON.parse(localStorage.getItem('crks_meet_likes')||'[]');const cmts=JSON.parse(localStorage.getItem('crks_meet_comments')||'[]');const cards=(ms||[]).map(m=>{const c=cmts.filter(x=>x.meet==m.id);const lc=likes.filter(x=>x.startsWith(m.id+'_')).length;return '<div class=card><h3>'+esc(m.title)+'</h3><p class=m>'+fd(m.starts_at)+' - '+esc(m.place||'')+'</p><div class=row><button onclick="likeMeet(\''+m.id+'\')">❤️ Me sumo ('+lc+')</button><button onclick="commentMeetShort(\''+m.id+'\')">💬 Comentario corto</button><button onclick="shareMeet(\''+m.id+'\',\''+esc(m.title)+'\',\''+esc(m.place||'')+'\',\''+fd(m.starts_at)+'\')">📤 Compartir</button></div><div>'+c.map(x=>'<p><b>'+esc(x.name)+':</b> '+esc(x.body)+'</p>').join('')+'</div>'+((m.user_id==me?.id)?'<button onclick="del(\'meetups\',\''+m.id+'\')">Borrar</button>':'')+'</div>';}).join('')||'<p class=m>Aun no hay encuentros. Propone el primero!</p>';return '<h2>Encuentros</h2><p class=m>Libre para cualquiera. Propone, sumate con corazon y comenta. Asi crece la comunidad.</p><div class=card><h3>Proponer encuentro</h3><input id=mt placeholder="Titulo, Ej: 10k domingo 6am"><input id=mp placeholder="Lugar, Ej: Parque"><input id=md type=datetime-local><button onclick="mk()">Proponer encuentro</button></div>'+cards;};
@@ -349,174 +353,77 @@ window.setStatus=function(msg){let el=document.getElementById('entrenoStatus');i
 // --- Foto: nunca bloquea ---
 window.up=async function(f){if(!f)return null;try{let blob=null;try{let dataUrl=await new Promise((res,rej)=>{let r=new FileReader();r.onload=()=>res(r.result);r.onerror=rej;r.readAsDataURL(f);});let imgEl=await new Promise((res,rej)=>{let im=new Image();im.onload=()=>res(im);im.onerror=rej;im.src=dataUrl;});let max=800,w=imgEl.naturalWidth||imgEl.width,h=imgEl.naturalHeight||imgEl.height;if(w>max||h>max){let rr=Math.min(max/w,max/h);w=Math.round(w*rr);h=Math.round(h*rr);}let c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').drawImage(imgEl,0,0,w,h);blob=await new Promise(res=>c.toBlob(res,'image/jpeg',0.55));}catch(e){blob=null;}let toUpload=blob||f;let name=(me&&me.id?me.id:'anon')+'/'+Date.now()+'.jpg';let upRes=await sb.storage.from('media').upload(name,toUpload,{upsert:true,contentType:'image/jpeg'});if(upRes.error)return null;return sb.storage.from('media').getPublicUrl(name).data.publicUrl;}catch(e){return null;}};
 // --- getPosts: mezcla Supabase + guardado local (para que nunca se pierda un entreno) ---
-// ===== FIX DEFINITIVO: id real, sin sb-, sin duplicado falso =====
-var __origGetPosts = (typeof getPosts==='function') ? getPosts : null;
-var __isUuid = function(id){return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(id||''));};
-var __isLocalId = function(id){var s=String(id||'');return s.indexOf('local-')===0 || s.indexOf('sb-')===0;};
-function __localReactions(){try{return JSON.parse(localStorage.getItem('crks_reactions')||'{}');}catch(e){return {};}}
-function __saveLocalReaction(id,kind,obj){try{var rx=__localReactions();rx[id]=rx[id]||{likes:[],comments:[]};if(kind==='like'){var ex=rx[id].likes.some(function(y){return y.user_id===me.id;});if(ex){rx[id].likes=rx[id].likes.filter(function(y){return y.user_id!==me.id;});}else{rx[id].likes.push(obj);}}else{rx[id].comments.push(obj);}localStorage.setItem('crks_reactions',JSON.stringify(rx));}catch(e){}}
-getPosts=async function(limit){
-  var fromSb=[];try{if(__origGetPosts)fromSb=await __origGetPosts(limit);}catch(e){fromSb=[];}
-  var local=[];try{local=JSON.parse(localStorage.getItem('crks_entrenos_local')||'[]');}catch(e){local=[];}
-  // Los ids sb- viejos eran falsos: si ya existe el post real en Supabase (mismo texto + mismo minuto), se descarta el falso. Si no existe, se convierte a local- para que nunca se mande a Supabase.
-  var realKeys={};(fromSb||[]).forEach(function(x){realKeys[(x.user_id||'')+'|'+(x.body||'')+'|'+String(x.created_at||'').slice(0,16)]=true;});
-  var cleanLocal=[];local.forEach(function(x){
-    var k=(x.user_id||'')+'|'+(x.body||'')+'|'+String(x.created_at||'').slice(0,16);
-    if(String(x.id||'').indexOf('sb-')===0 && realKeys[k])return;
-    if(String(x.id||'').indexOf('sb-')===0)x.id='local-'+String(x.id).slice(3);
-    cleanLocal.push(x);
-  });
-  // Supabase primero: si hay duplicado, gana el id REAL (UUID), no el local.
-  var merged=[].concat(fromSb||[],cleanLocal);
-  var seen={};var out=[];
-  merged.forEach(function(x){
-    var k=(x.user_id||'')+'|'+(x.body||'')+'|'+String(x.created_at||'').slice(0,16);
-    if(seen[k])return;seen[k]=true;out.push(x);
-  });
-  // Reacciones locales pegadas a cada post
-  try{var rx=__localReactions();out.forEach(function(x){if(rx[x.id]){x.likes=x.likes||[];rx[x.id].likes.forEach(function(y){if(!x.likes.some(function(z){return z.user_id===y.user_id;}))x.likes.push(y);});x.comments=x.comments||[];rx[x.id].comments.forEach(function(c){x.comments.push(c);});}});}catch(e){}
-  out.sort(function(a,b){return new Date(b.created_at)-new Date(a.created_at);});
-  return out.slice(0,limit||50);
-};
-// --- Publicar: con id REAL de Supabase, sin espejo falso ---
-window.post=async function(){
-  var btn=document.getElementById('btnPublicarEntreno');
-  try{
-    if(btn&&btn.disabled)return;if(btn){btn.disabled=true;btn.textContent='Publicando…';}
-    setStatus('Publicando tu entreno…');
-    var sport0=document.getElementById('ps')?.value||document.querySelector('.sport-card.active')?.dataset?.sport||'Running';
-    var body=(document.getElementById('pb')?.value||'').trim();if(!body)body='Entreno de '+sport0;
-    if(!me){try{await sb.auth.getSession();}catch(e){}try{await loadMe();}catch(e){}if(!me)throw new Error('Inicia sesión para publicar. Si acabas de entrar, espera 2 segundos y vuelve a intentar.');}
-    var tiempoTxt=syncTiempo();if(!tiempoTxt||tiempoTxt==='INCOMPLETO')throw new Error('Completa el Tiempo: HH : MM : SS. Ejemplo: 10 : 10 : 10');
-    var pace=syncPace();
-    if(sport0==='Gym'||sport0==='Calistenia'){pace='';}
-    else if(sport0==='MTB'&&pace==='INCOMPLETO'){pace='';}
-    else if(pace==='INCOMPLETO')throw new Error('Completa el Pace: MM : SS. Ejemplo: 05 : 09');
-    var km=(sport0==='Gym'||sport0==='Calistenia')?0:(+((document.getElementById('pk')?.value)||0)||0);
-    if(!pace){try{var mins0=parseTiempo(tiempoTxt);if(km&&mins0){var sec=Math.round((mins0/km)*60);pace=String(Math.floor(sec/60)).padStart(2,'0')+' : '+String(sec%60).padStart(2,'0')+' /km';}}catch(e){}}
-    var image_url=null,fotoFallida=false;var f=document.getElementById('pf')?.files?.[0];
-    if(f){try{image_url=await up(f);if(!image_url)fotoFallida=true;}catch(e){fotoFallida=true;}}
-    var minutes=Math.round(parseTiempo(tiempoTxt)||0);
-    var sport=sport0;
-    var _muscle=[].slice.call(document.querySelectorAll('.muscle-pill.active')).map(function(b){return b.dataset.muscle||b.textContent.trim();}).filter(Boolean).join(' + ');
-    var _showMuscle=(sport==='Gym'||sport==='Calistenia');
-    var _terrenoEl=document.querySelector('.terreno-pill.active');var _terreno=_terrenoEl?_terrenoEl.dataset.terreno||_terrenoEl.textContent.trim():'';
-    var _desnivel=(document.getElementById('desnivel')?.value||'').trim();
-    var _rutina=(document.getElementById('rutina')?.value||'').trim();
-    var _altimetria=(document.getElementById('altimetria')?.value||'').trim();
-    var _lugar=[].slice.call(document.querySelectorAll('.lugar-pill.active')).map(function(b){return b.dataset.lugar||b.textContent.trim();}).filter(Boolean).join(' + ');
-    var extra=[];if(tiempoTxt)extra.push('Tiempo: '+tiempoTxt);if(pace)extra.push('Pace: '+pace);
-    if(_showMuscle&&_muscle)extra.push('Músculo: '+_muscle);
-    if(sport==='Trail'&&_altimetria)extra.push('Altimetría: '+_altimetria+' m');
-    if(sport==='MTB'&&_desnivel)extra.push('Desnivel: '+_desnivel+' m');
-    if(sport==='MTB'&&_terreno)extra.push('Terreno: '+_terreno);
-    if(sport==='Natación'&&_lugar)extra.push('Lugar: '+_lugar);
-    if(extra.length)body=body+'\n['+extra.join(' | ')+']';
-    if(_showMuscle&&_rutina)body=body+'\nRUTINA:\n'+_rutina;
-    minutes=Math.round(minutes||0);km=Math.round((km||0)*100)/100;
-    var saved=false,lastErr=null;
-    var attempts=[
-      {user_id:me.id,body,sport,km,minutes,image_url},
-      {user_id:me.id,body,sport,km,minutes},
-      {user_id:me.id,body,sport,km:Math.round(km||0),minutes:Math.round(minutes||0)},
-      {user_id:me.id,body,sport},
-      {user_id:me.id,body,sport:'Running'},
-      {user_id:me.id,body}
-    ];
-    for(var ai=0;ai<attempts.length;ai++){
-      try{var r=await sb.from('posts').insert(attempts[ai]);if(!r.error){saved=true;break;}lastErr=r.error;}catch(e){lastErr=e;}
-    }
-    // Best-effort: intentar leer el id real, pero si la lectura está bloqueada NO marcar como fallido
-    if(saved){try{var rr=await sb.from('posts').select('id').eq('user_id',me.id).order('created_at',{ascending:false}).limit(1);if(rr&&rr.data&&rr.data[0]){/* id real disponible */}}catch(e){}}
-    if(!saved){
-      var local=[];try{local=JSON.parse(localStorage.getItem('crks_entrenos_local')||'[]');}catch(e){local=[];}
-      local.unshift({id:'local-'+Date.now(),user_id:me.id,body,sport,km,minutes,image_url,created_at:new Date().toISOString(),profiles:{name:(prof&&prof.name)||'Crack',avatar_url:prof&&prof.avatar_url,streak:(prof&&prof.streak)||0},likes:[],comments:[]});
-      localStorage.setItem('crks_entrenos_local',JSON.stringify(local.slice(0,50)));
-      setStatus('⚠️ Supabase no dejó guardar ('+(lastErr&&lastErr.message?lastErr.message:lastErr)+'). Quedó solo en este celular.');
-    }else{setStatus('✅ Entreno publicado para todos');}
-    var t0=tab;['pb','pk'].forEach(function(id){var el=document.getElementById(id);if(el)el.value='';});['th','tm','ts','paceM','paceS'].forEach(function(id){var el=document.getElementById(id);if(el)el.value='';});
-    var rEl=document.getElementById('rutina');if(rEl)rEl.value='';var pf=document.getElementById('pf');if(pf)pf.value='';var pv=document.getElementById('entrenoPreview');if(pv)pv.innerHTML='';
-    try{await loadMe();}catch(e){}
-    tab=t0;try{await render();}catch(e){}
-    if(!saved)alert('Tu entreno quedó guardado SOLO en este celular.\n\nSupabase dijo: '+(lastErr&&lastErr.message?lastErr.message:lastErr)+'\n\nSi sigue fallando, pega el SQL de posts que te doy abajo.');
-    else if(fotoFallida)alert('Entreno publicado ✅ pero la foto no subió. Revisa el bucket media o publica sin foto.');
-    else alert('Entreno publicado para todos ✅');
-  }catch(err){setStatus('❌ No se pudo publicar: '+(err&&err.message?err.message:err));alert('No se pudo publicar: '+(err&&err.message?err.message:err));}
-  finally{var b=document.getElementById('btnPublicarEntreno');if(b){b.disabled=false;b.textContent='Publicar entreno';}}
-};
-document.addEventListener('click',function(e){if(e.target&&e.target.closest&&e.target.closest('#btnPublicarEntreno')){e.preventDefault();post();}});
-// --- Reaccionar / comentar: si el id es local, se guarda en local; nunca se manda un id falso a Supabase ---
-window.like=async function(id,l){
-  if(!me)return alert('Inicia sesión para reaccionar');
-  if(__isLocalId(id)){__saveLocalReaction(id,'like',{user_id:me.id});await render();return;}
-  try{var r=await(l?sb.from('likes').delete().match({post_id:id,user_id:me.id}):sb.from('likes').insert({post_id:id,user_id:me.id}));if(r.error)throw r.error;await render();}
-  catch(e){alert('No se pudo reaccionar. Pega el SQL de likes. Error: '+e.message);}
-};
-window.cmtInline=async function(id){
-  var inp=document.getElementById('cmt-'+id);if(!inp)return;var body=(inp.value||'').trim();
-  if(!body)return alert('Escribe un comentario corto');if(body.length>120)return alert('Máx. 120 caracteres');if(!me)return alert('Inicia sesión para comentar');
-  if(__isLocalId(id)){
-    __saveLocalReaction(id,'comment',{id:'local-cmt-'+Date.now(),body:body,profiles:{name:(prof&&prof.name)||'Crack'}});
-    inp.value='';await render();return;
-  }
-  try{var r=await sb.from('comments').insert({post_id:id,user_id:me.id,body});if(r.error)throw r.error;inp.value='';await render();}
-  catch(e){alert('No se pudo comentar. Error: '+e.message);}
-};
-window.cmt=async function(id){var inp=document.getElementById('cmt-'+id);if(inp){inp.focus();return;}var b=prompt('Tu comentario');if(!b)return;var fake=document.getElementById('cmt-'+id);cmtInline(id);};
-window.pickSport=function(s,el){
-  var sel=document.getElementById('ps');if(sel)sel.value=s;
-  document.querySelectorAll('.sport-card').forEach(function(c){var on=c.dataset.sport===s;c.classList.toggle('active',on);c.style.border=on?'2px solid #A6FF00':'1px solid #333';c.style.background=on?'#1a2a00':'#111';});
-  function show(id,on){var b=document.getElementById(id);if(b)b.style.display=on?'block':'none';}
-  var isGym=(s==='Gym'||s==='Calistenia');
-  show('muscleBlock',isGym);show('routineBlock',isGym);show('altimetriaBlock',s==='Trail');show('mtbBlock',s==='MTB');show('natacionBlock',s==='Natación');
-  show('kmBlock',!isGym);show('tiempoBlock',true);show('paceBlock',!isGym);
-  var st=document.getElementById('entrenoStatus');if(st)st.textContent='Deporte: '+s;
-};
-window.pickMuscle=function(m,el){if(el)el.classList.toggle('active');};
-window.pickTerreno=function(m,el){document.querySelectorAll('.terreno-pill').forEach(function(b){b.classList.toggle('active',b===el);});};
-window.pickLugar=function(m,el){if(el)el.classList.toggle('active');};
-document.addEventListener('click',function(e){
-  if(!e.target||!e.target.closest)return;
-  var card=e.target.closest('.sport-card');if(card){e.preventDefault();pickSport(card.dataset.sport,card);return;}
-  var mp=e.target.closest('.muscle-pill');if(mp){e.preventDefault();pickMuscle(mp.dataset.muscle,mp);return;}
-  var tp=e.target.closest('.terreno-pill');if(tp){e.preventDefault();pickTerreno(tp.dataset.terreno,tp);return;}
-  var lp=e.target.closest('.lugar-pill');if(lp){e.preventDefault();pickLugar(lp.dataset.lugar,lp);return;}
-});
-(function(){var st=document.createElement('style');st.textContent='.publish-card button.muscle-pill,.publish-card button.terreno-pill,.publish-card button.lugar-pill,.entreno-publish button.muscle-pill,.entreno-publish button.terreno-pill,.entreno-publish button.lugar-pill{width:auto!important;flex:0 0 auto!important;background:#1a1a1a!important;color:#fff!important;border:1px solid #444!important;border-radius:999px!important;padding:8px 14px!important;font-size:13px!important;font-weight:600!important}.publish-card button.muscle-pill.active,.publish-card button.terreno-pill.active,.publish-card button.lugar-pill.active,.entreno-publish button.muscle-pill.active,.entreno-publish button.terreno-pill.active,.entreno-publish button.lugar-pill.active{background:#A6FF00!important;color:#000!important;font-weight:800!important;border-color:#A6FF00!important}.publish-card div.sport-card,.entreno-publish div.sport-card{background:#111!important;border:1px solid #333!important}.publish-card div.sport-card.active,.entreno-publish div.sport-card.active{background:#1a2a00!important;border:2px solid #A6FF00!important}';document.head.appendChild(st);})();
-// --- Entrenos: formulario por deporte + rutina visible + comentar con id real ---
+let __origGetPosts=window.getPosts;
+window.getPosts=async function(limit){var fromSb=[];try{fromSb=await __origGetPosts(limit);}catch(e){fromSb=[];}var local=[];try{local=JSON.parse(localStorage.getItem('crks_entrenos_local')||'[]');}catch(e){local=[];}var realKeys={};(fromSb||[]).forEach(function(x){realKeys[(x.user_id||'')+'|'+(x.body||'')+'|'+String(x.created_at||'').slice(0,16)]=true;});var cleanLocal=[];local.forEach(function(x){var k=(x.user_id||'')+'|'+(x.body||'')+'|'+String(x.created_at||'').slice(0,16);if(String(x.id||'').indexOf('sb-')===0&&realKeys[k])return;if(String(x.id||'').indexOf('sb-')===0)x.id='local-'+String(x.id).slice(3);cleanLocal.push(x);});var merged=[].concat(fromSb||[],cleanLocal);var seen={};var out=[];merged.forEach(function(x){var k=(x.user_id||'')+'|'+(x.body||'')+'|'+String(x.created_at||'').slice(0,16);if(seen[k])return;seen[k]=true;out.push(x);});try{var rx=JSON.parse(localStorage.getItem('crks_reactions')||'{}');out.forEach(function(x){if(rx[x.id]){x.likes=x.likes||[];rx[x.id].likes.forEach(function(y){if(!x.likes.some(function(z){return z.user_id===y.user_id;}))x.likes.push(y);});x.comments=x.comments||[];rx[x.id].comments.forEach(function(c){x.comments.push(c);});}});}catch(e){}out.sort(function(a,b){return new Date(b.created_at)-new Date(a.created_at);});return out.slice(0,limit||50);};
+// --- Publicar: 3 intentos Supabase + respaldo local ---
+window.post=async function(){let btn=document.getElementById('btnPublicarEntreno');try{
+if(btn&&btn.disabled)return;if(btn){btn.disabled=true;btn.textContent='Publicando…';}
+setStatus('Publicando tu entreno…');
+let sport0=document.getElementById('ps')?.value||document.querySelector('.sport-card.active')?.dataset?.sport||'Running';let body=(document.getElementById('pb')?.value||'').trim();if(!body)body='Entreno de '+sport0;
+if(!me){try{await sb.auth.getSession();}catch(e){}try{await loadMe();}catch(e){}if(!me)throw new Error('Inicia sesión para publicar. Si acabas de entrar, espera 2 segundos y vuelve a intentar.');}
+let tiempoTxt=syncTiempo();if(!tiempoTxt||tiempoTxt==='INCOMPLETO')throw new Error('Completa el Tiempo: HH : MM : SS. Ejemplo: 10 : 10 : 10');
+let pace=syncPace();if(sport0==='Gym'||sport0==='Calistenia'){pace='';}else if(sport0==='MTB'&&pace==='INCOMPLETO'){pace='';}else if(pace==='INCOMPLETO')throw new Error('Completa el Pace: MM : SS. Ejemplo: 05 : 09');
+let km=(sport0==='Gym'||sport0==='Calistenia')?0:(+((document.getElementById('pk')?.value)||0)||0);
+if(!pace){try{let mins=parseTiempo(tiempoTxt);if(km&&mins){let sec=Math.round((mins/km)*60);pace=String(Math.floor(sec/60)).padStart(2,'0')+' : '+String(sec%60).padStart(2,'0')+' /km';}}catch(e){}}
+let image_url=null,fotoFallida=false;let f=document.getElementById('pf')?.files?.[0];
+if(f){try{image_url=await Promise.race([up(f),new Promise(res=>setTimeout(()=>res(null),15000))]);if(!image_url)fotoFallida=true;}catch(e){fotoFallida=true;}}
+let minutes=Math.round(parseTiempo(tiempoTxt)||0);let _muscle=[].slice.call(document.querySelectorAll('.muscle-pill.active')).map(function(b){return b.dataset.muscle||b.textContent.trim();}).filter(Boolean).join(' + ');let _showMuscle=(sport0==='Gym'||sport0==='Calistenia');let _terrenoEl=document.querySelector('.terreno-pill.active');let _terreno=_terrenoEl?_terrenoEl.dataset.terreno||_terrenoEl.textContent.trim():'';let _desnivel=(document.getElementById('desnivel')?.value||'').trim();let _rutina=(document.getElementById('rutina')?.value||'').trim();let _altimetria=(document.getElementById('altimetria')?.value||'').trim();let _lugar=[].slice.call(document.querySelectorAll('.lugar-pill.active')).map(function(b){return b.dataset.lugar||b.textContent.trim();}).filter(Boolean).join(' + ');let kilos=+((document.getElementById('pkilos')?.value)||0)||0;
+let extra=[];if(kilos)extra.push('Kilos: '+kilos);if(tiempoTxt)extra.push('Tiempo: '+tiempoTxt);if(pace)extra.push('Pace: '+pace);
+if(_showMuscle&&_muscle)extra.push('Músculo: '+_muscle);if(sport0==='Trail'&&_altimetria)extra.push('Altimetría: '+_altimetria+' m');if(sport0==='MTB'&&_desnivel)extra.push('Desnivel: '+_desnivel+' m');if(sport0==='MTB'&&_terreno)extra.push('Terreno: '+_terreno);if(sport0==='Natación'&&_lugar)extra.push('Lugar: '+_lugar);if(extra.length)body=body+'\n['+extra.join(' | ')+']';if(_showMuscle&&_rutina)body=body+'\nRUTINA:\n'+_rutina;
+let sport=sport0;minutes=Math.round(minutes||0);km=Math.round((km||0)*100)/100;
+let saved=false,lastErr=null;
+let attempts=[{user_id:me.id,body,sport,km,minutes,image_url},{user_id:me.id,body,sport,km,minutes},{user_id:me.id,body,sport,km:Math.round(km||0),minutes:Math.round(minutes||0)},{user_id:me.id,body,sport},{user_id:me.id,body,sport:'Running'},{user_id:me.id,body}];
+for(let a of attempts){try{let r=await sb.from('posts').insert(a);if(!r.error){saved=true;break;}lastErr=r.error;}catch(e){lastErr=e;}}
+if(!saved){
+// Respaldo local: el entreno SI queda publicado en tu celular aunque Supabase falle
+let local=[];try{local=JSON.parse(localStorage.getItem('crks_entrenos_local')||'[]');}catch(e){local=[];}
+local.unshift({id:'local-'+Date.now(),user_id:me.id,body,sport,km,minutes,image_url,created_at:new Date().toISOString(),profiles:{name:(prof&&prof.name)||'Crack',avatar_url:prof&&prof.avatar_url,streak:(prof&&prof.streak)||0},likes:[],comments:[]});
+localStorage.setItem('crks_entrenos_local',JSON.stringify(local.slice(0,50)));
+setStatus('⚠️ Supabase no dejó guardar ('+(lastErr&&lastErr.message?lastErr.message:lastErr)+'). Tu entreno quedó guardado en este celular y sí se ve arriba.');
+}else{setStatus('✅ Entreno publicado');}
+let t0=null;try{t0=tab;}catch(e){t0=null;}['pb','pk','pkilos'].forEach(id=>{let el=document.getElementById(id);if(el)el.value='';});['th','tm','ts','paceM','paceS'].forEach(id=>{let el=document.getElementById(id);if(el)el.value='';});let pf=document.getElementById('pf');if(pf)pf.value='';let pv=document.getElementById('entrenoPreview');if(pv)pv.innerHTML='';
+try{await loadMe();}catch(e){}
+try{if(typeof tab!=='undefined')tab=t0;}catch(e){}try{await render();}catch(e){}
+if(!saved)alert('Tu entreno quedó guardado en este celular y se ve arriba ✅\n\nSupabase dijo: '+(lastErr&&lastErr.message?lastErr.message:lastErr)+'\n\nCopia ese error y mándamelo. Si dice RLS / policy, pega el SQL de posts que te doy abajo.');
+else if(fotoFallida)alert('Entreno publicado ✅ pero la foto no subió. Revisa el bucket media en Supabase o publica sin foto.');
+else alert('Entreno publicado! Ya quedó guardado.');
+}catch(err){setStatus('❌ No se pudo publicar: '+(err&&err.message?err.message:err));alert('No se pudo publicar: '+(err&&err.message?err.message:err));}
+finally{let b=document.getElementById('btnPublicarEntreno');if(b){b.disabled=false;b.textContent='Publicar entreno';}}};
+// Delegación: si el onclick falla, el clic igual publica
+document.addEventListener('click',function(e){if(e.target&&e.target.closest){var card=e.target.closest('.sport-card');if(card){e.preventDefault();pickSport(card.dataset.sport,card);return;}var mp=e.target.closest('.muscle-pill');if(mp){e.preventDefault();pickMuscle(mp.dataset.muscle,mp);return;}var tp=e.target.closest('.terreno-pill');if(tp){e.preventDefault();pickTerreno(tp.dataset.terreno,tp);return;}var lp=e.target.closest('.lugar-pill');if(lp){e.preventDefault();pickLugar(lp.dataset.lugar,lp);return;}}if(e.target&&e.target.closest&&e.target.closest('#btnPublicarEntreno')){e.preventDefault();post();}});
+// --- Reaccionar / comentar corto ---
+window.like=async function(id,l){if(!me)return alert('Inicia sesión para reaccionar');try{let r=await(l?sb.from('likes').delete().match({post_id:id,user_id:me.id}):sb.from('likes').insert({post_id:id,user_id:me.id}));if(r.error)throw r.error;await render();}catch(e){if(String(id).startsWith('local-')){alert('Este entreno está guardado solo en este celular. Para reaccionar, publícalo en la nube con el SQL de posts.');}else alert('No se pudo reaccionar. Error: '+e.message);}};
+window.cmtInline=async function(id){let inp=document.getElementById('cmt-'+id);if(!inp)return;let body=(inp.value||'').trim();if(!body)return alert('Escribe un comentario corto');if(body.length>120)return alert('Máx. 120 caracteres');if(!me)return alert('Inicia sesión para comentar');try{let r=await sb.from('comments').insert({post_id:id,user_id:me.id,body});if(r.error)throw r.error;inp.value='';await render();}catch(e){alert('No se pudo comentar. Error: '+e.message);}};
+// --- Entrenos: mismo diseño, con Tiempo 10 : 10 : 10 y Pace 05 : 09 ---
 V.feed=async()=>{
 let ps=await getPosts(50);let sports=['Running','Trail','Ciclismo Ruta','MTB','Natación','Gym','Calistenia'];
 let cards=(ps||[]).map(x=>{
 let nm=esc(x.profiles?.name||'Crack');let ini=nm.charAt(0).toUpperCase();let av=x.profiles?.avatar_url?`<img loading="lazy" decoding="async" src="${esc(x.profiles.avatar_url)}">`:ini;
-let lk=(x.likes||[]).some(y=>y.user_id==me?.id);let isMine=me&&x.user_id==me.id;
-let _parts=String(x.body||'').split('\nRUTINA:\n');let _mainBody=_parts[0];let _rutina=_parts.slice(1).join('\nRUTINA:\n');
+let lk=(x.likes||[]).some(y=>y.user_id==me?.id);let isMine=me&&x.user_id==me.id;let _parts=String(x.body||'').split('\nRUTINA:\n');let _mainBody=_parts[0];let _rutina=_parts.slice(1).join('\nRUTINA:\n');let isGymCard=(x.sport==='Gym'||x.sport==='Calistenia');
 let paceTxt=x.pace?esc(String(x.pace).replace(':',' : ')):(x.km&&x.minutes?(Math.floor(x.minutes/x.km)+' : '+String(Math.round((x.minutes/x.km%1)*60)).padStart(2,'0')+' /km'):'—');
-let isGymCard=(x.sport==='Gym'||x.sport==='Calistenia');
-return `<article class="post-card entreno-card"><div class="post-top"><div class="post-avatar">${av}</div><div style="flex:1"><div style="font-weight:700">${nm}</div><div class="m">${fd(x.created_at)} • ${esc(x.sport||'')}${isGymCard?'':' • '+(+x.km||0)+' km'}</div></div>${isMine?`<button class="g" style="color:#ff6b6b" onclick="deletePost('${x.id}')">🗑️</button>`:''}</div><p>${esc(_mainBody)}</p>${_rutina?`<div><button class=g onclick="document.getElementById('rut-${x.id}').style.display=document.getElementById('rut-${x.id}').style.display==='none'?'block':'none'">📋 Ver rutina</button><div id="rut-${x.id}" style="display:none;background:#111;border:1px solid #333;border-radius:10px;padding:10px;margin-top:8px;white-space:pre-wrap">${esc(_rutina)}</div></div>`:''}${img(x.image_url)}<div class="post-stats"><span>⏱️ ${fmtDigital(x.minutes)}</span>${isGymCard?'':`<span>⚡ Pace ${paceTxt}</span>`}</div><div class="row"><button class=g onclick="like('${x.id}',${lk})">${lk?'❤️':'🤍'} ${(x.likes||[]).length}</button><button class=g onclick="document.getElementById('cmt-${x.id}').focus()">💬 ${(x.comments||[]).length}</button><button class=g onclick="sharePost('${x.id}')">📤 Compartir</button></div>${(x.comments||[]).slice(-3).map(c=>`<small><b>${esc(c.profiles?.name||'Crack')}:</b> ${esc(c.body)}</small><br>`).join('')}<div class="row" style="margin-top:8px"><input id="cmt-${x.id}" maxlength="120" placeholder="Comenta corto… (máx. 120)" style="flex:1"><button class=g onclick="cmtInline('${x.id}')">Enviar</button></div></article>`}).join('')||'<p class=m>Aún no hay entrenos. Publica el primero.</p>';
+return `<article class="post-card entreno-card"><div class="post-top"><div class="post-avatar">${av}</div><div style="flex:1"><div style="font-weight:700">${nm}</div><div class="m">${fd(x.created_at)} • ${esc(x.sport||'')}${isGymCard?'':' • '+(+x.km||0)+' km'}</div></div>${isMine?`<button class="g" style="color:#ff6b6b" onclick="deletePost('${x.id}')">🗑️</button>`:''}</div><p>${esc(_mainBody)}</p>${_rutina?`<div><button class=g onclick="document.getElementById('rut-'+'${x.id}').style.display=document.getElementById('rut-'+'${x.id}').style.display==='none'?'block':'none'">📋 Ver rutina</button><div id="rut-${x.id}" style="display:none;background:#111;border:1px solid #333;border-radius:10px;padding:10px;margin-top:8px;white-space:pre-wrap">${esc(_rutina)}</div></div>`:''}${img(x.image_url)}<div class="post-stats"><span>⏱️ ${fmtDigital(x.minutes)}</span><span>⚡ Pace ${paceTxt}</span></div><div class="row"><button class=g onclick="like('${x.id}',${lk})">${lk?'❤️':'🤍'} ${(x.likes||[]).length}</button><button class=g onclick="document.getElementById('cmt-${x.id}').focus()">💬 ${(x.comments||[]).length}</button><button class=g onclick="sharePost('${x.id}')">📤 Compartir</button></div>${(x.comments||[]).slice(-3).map(c=>`<small><b>${esc(c.profiles?.name||'Crack')}:</b> ${esc(c.body)}</small><br>`).join('')}<div class="row" style="margin-top:8px"><input id="cmt-${x.id}" maxlength="120" placeholder="Comenta corto… (máx. 120)" style="flex:1"><button class=g onclick="cmtInline('${x.id}')">Enviar</button></div></article>`}).join('')||'<p class=m>Aún no hay entrenos. Publica el primero.</p>';
 return `<div><h1 style="text-align:center;margin:6px 0 2px">Entrenos</h1><p class=m style="text-align:center">Publica, reacciona, comenta y comparte. Todos los entrenos viven aquí.</p>
 <div class="card publish-card entreno-publish" style="border:2px solid #A6FF00"><div class="publish-title">PUBLICA TU <span>ENTRENO</span></div><div class="publish-sub">Cada kilómetro cuenta. Comparte tu racha con los Cracks.</div>
 <label class=m>¿Qué entrenaste hoy? <small style="font-weight:400">(opcional, para complementar)</small></label><textarea id=pb rows=2 placeholder="Opcional: cuenta algo de tu sesión…"></textarea>
-<label class=m>Deporte — elige uno</label><div id="sportCards" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">${sports.map((s,i)=>{var _ic={Running:'🏃',Trail:'⛰️','Ciclismo Ruta':'🚴',MTB:'🚵',Natación:'🏊',Gym:'🏋️',Calistenia:'🤸'}[s]||'⚡';return `<div class="sport-card ${i==0?'active':''}" data-sport="${s}" style="cursor:pointer;background:${i==0?'#1a2a00':'#111'};border:${i==0?'2px solid #A6FF00':'1px solid #333'};border-radius:14px;padding:12px 4px;text-align:center;min-height:72px;display:flex;flex-direction:column;justify-content:center;align-items:center"><div style="font-size:1.7rem;line-height:1">${_ic}</div><b style="font-size:13px;margin-top:4px">${s}</b></div>`}).join('')}</div>
-<select id=ps style="display:none"><option>Running</option><option>Trail</option><option>Ciclismo Ruta</option><option>MTB</option><option>Natación</option><option>Gym</option><option>Calistenia</option></select>
-<div id="muscleBlock" style="display:none;margin-top:12px"><label class=m>💪 Grupos musculares — puedes elegir varios</label><div class="row" id="musclePills" style="flex-wrap:wrap;gap:6px">${['Pecho','Espalda','Pierna','Glúteo','Hombro','Brazo','Core','Full Body','Habilidad'].map((m,i)=>`<button type="button" class="g muscle-pill" data-muscle="${m}">${m}</button>`).join('')}</div><small class=m>Solo Gym y Calistenia. Toca varios si tu rutina es de varios grupos.</small></div>
-<div id="routineBlock" style="display:none;margin-top:12px"><label class=m>📋 Rutina — se muestra a todos para que la puedan hacer</label><textarea id="rutina" rows="3" placeholder="Ej: Press banca 4x10&#10;Press inclinado 3x12&#10;Fondos 3x15"></textarea><small class=m>Si la dejas vacía, publica sin rutina.</small></div>
-<div id="altimetriaBlock" style="display:none;margin-top:12px"><label class=m>⛰️ Altimetría</label><input id="altimetria" type="number" min="0" placeholder="Ej: 450 m"></div>
-<div id="mtbBlock" style="display:none;margin-top:12px"><label class=m>⛰️ Desnivel</label><input id="desnivel" type="number" min="0" placeholder="Ej: 850 m"><label class=m> Terreno</label><div class="row" id="terrenoPills" style="flex-wrap:wrap;gap:6px">${['Trocha','Sendero','Enduro','Cross Country'].map((m,i)=>`<button type="button" class="g terreno-pill ${i==1?'active':''}" data-terreno="${m}">${m}</button>`).join('')}</div></div>
-<div id="natacionBlock" style="display:none;margin-top:12px"><label class=m>🏊 ¿Dónde nadaste?</label><div class="row" id="lugarPills" style="flex-wrap:wrap;gap:6px">${['Piscina','Mar','Río','Lago'].map((m,i)=>`<button type="button" class="g lugar-pill ${i==0?'active':''}" data-lugar="${m}">${m}</button>`).join('')}</div></div>
-<div id="kmBlock" style="margin-top:12px"><label class=m>Kilómetros</label><input id=pk type="number" step="0.1" min="0" placeholder="0.0"></div>
-<div id="tiempoBlock" style="margin-top:12px"><label class=m>Tiempo • HH : MM : SS</label><div style="display:flex;align-items:center;gap:6px"><input id=th inputmode="numeric" maxlength="2" placeholder="10" style="text-align:center;font-size:1.2rem;letter-spacing:2px" oninput="timeBox(this,'tm')"><span style="font-size:1.2rem;font-weight:900">:</span><input id=tm inputmode="numeric" maxlength="2" placeholder="10" style="text-align:center;font-size:1.2rem;letter-spacing:2px" oninput="timeBox(this,'ts')" onkeydown="timeBack(event,'th')"><span style="font-size:1.2rem;font-weight:900">:</span><input id=ts inputmode="numeric" maxlength="2" placeholder="10" style="text-align:center;font-size:1.2rem;letter-spacing:2px" oninput="timeBox(this,null)" onkeydown="timeBack(event,'tm')"></div><small class=m>Ejemplo: 10 : 10 : 10</small><input id=pm type="hidden"></div>
-<div id="paceBlock" style="margin-top:12px"><label class=m>Pace • MM : SS /km</label><div style="display:flex;align-items:center;gap:6px"><input id=paceM inputmode="numeric" maxlength="2" placeholder="05" style="text-align:center;font-size:1.2rem;letter-spacing:2px" oninput="timeBox(this,'paceS')"><span style="font-size:1.2rem;font-weight:900">:</span><input id=paceS inputmode="numeric" maxlength="2" placeholder="09" style="text-align:center;font-size:1.2rem;letter-spacing:2px" oninput="timeBox(this,null)" onkeydown="timeBack(event,'paceM')"><span class=m>/km</span></div><small class=m>Si lo dejas vacío, se calcula solo. En MTB es opcional.</small><input id=ppace type="hidden"></div>
+<label class=m>Deporte</label><label class=m>Deporte — elige uno</label><div id="sportCards" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">${sports.map((s,i)=>{var _ic={Running:'🏃',Trail:'⛰️','Ciclismo Ruta':'🚴',MTB:'🚵',Natación:'🏊',Gym:'🏋️',Calistenia:'🤸'}[s]||'⚡';return `<div class="sport-card ${i==0?'active':''}" data-sport="${s}" style="cursor:pointer;background:${i==0?'#1a2a00':'#111'};border:${i==0?'2px solid #A6FF00':'1px solid #333'};border-radius:14px;padding:12px 4px;text-align:center;min-height:72px;display:flex;flex-direction:column;justify-content:center;align-items:center"><div style="font-size:1.7rem;line-height:1">${_ic}</div><b style="font-size:13px;margin-top:4px">${s}</b></div>`}).join('')}</div>
+<select id=ps style="display:none"><option>Running</option><option>Trail</option><option>Ciclismo Ruta</option><option>MTB</option><option>Natación</option><option>Gym</option><option>Calistenia</option></select><div id="muscleBlock" style="display:none;margin-top:12px"><label class=m>💪 Grupos musculares — puedes elegir varios</label><div class="row" id="musclePills" style="flex-wrap:wrap;gap:6px">${['Pecho','Espalda','Pierna','Glúteo','Hombro','Brazo','Core','Full Body','Habilidad'].map((m,i)=>`<button type="button" class="g muscle-pill" data-muscle="${m}">${m}</button>`).join('')}</div><small class=m>Solo Gym y Calistenia.</small></div><div id="routineBlock" style="display:none;margin-top:12px"><label class=m>📋 Rutina — se muestra a todos</label><textarea id="rutina" rows="3" placeholder="Ej: Press banca 4x10"></textarea></div><div id="altimetriaBlock" style="display:none;margin-top:12px"><label class=m>⛰️ Altimetría</label><input id="altimetria" type="number" min="0" placeholder="Ej: 450 m"></div><div id="mtbBlock" style="display:none;margin-top:12px"><label class=m>⛰️ Desnivel</label><input id="desnivel" type="number" min="0" placeholder="Ej: 850 m"><label class=m> Terreno</label><div class="row" id="terrenoPills" style="flex-wrap:wrap;gap:6px">${['Trocha','Sendero','Enduro','Cross Country'].map((m,i)=>`<button type="button" class="g terreno-pill ${i==1?'active':''}" data-terreno="${m}">${m}</button>`).join('')}</div></div><div id="natacionBlock" style="display:none;margin-top:12px"><label class=m>🏊 ¿Dónde nadaste?</label><div class="row" id="lugarPills" style="flex-wrap:wrap;gap:6px">${['Piscina','Mar','Río','Lago'].map((m,i)=>`<button type="button" class="g lugar-pill ${i==0?'active':''}" data-lugar="${m}">${m}</button>`).join('')}</div></div>
+<div class="row"><div style="flex:1"><label class=m>Km</label><input id=pk type="number" step="0.1" min="0" placeholder="0.0"></div>
+<div style="flex:1"><label class=m>Tiempo • HH : MM : SS</label><div style="display:flex;align-items:center;gap:6px"><input id=th inputmode="numeric" maxlength="2" placeholder="10" style="text-align:center;font-size:1.2rem;letter-spacing:2px" oninput="timeBox(this,'tm')"><span style="font-size:1.2rem;font-weight:900">:</span><input id=tm inputmode="numeric" maxlength="2" placeholder="10" style="text-align:center;font-size:1.2rem;letter-spacing:2px" oninput="timeBox(this,'ts')" onkeydown="timeBack(event,'th')"><span style="font-size:1.2rem;font-weight:900">:</span><input id=ts inputmode="numeric" maxlength="2" placeholder="10" style="text-align:center;font-size:1.2rem;letter-spacing:2px" oninput="timeBox(this,null)" onkeydown="timeBack(event,'tm')"></div><small class=m>Ejemplo: 10 : 10 : 10</small><input id=pm type="hidden"></div></div>
+<div class="row"><div style="flex:1"><label class=m>Kilos (opcional)</label><input id=pkilos type="number" step="0.5" min="0" placeholder="—"></div>
+<div style="flex:1"><label class=m>Pace (opcional) • MM : SS /km</label><div style="display:flex;align-items:center;gap:6px"><input id=paceM inputmode="numeric" maxlength="2" placeholder="05" style="text-align:center;font-size:1.2rem;letter-spacing:2px" oninput="timeBox(this,'paceS')"><span style="font-size:1.2rem;font-weight:900">:</span><input id=paceS inputmode="numeric" maxlength="2" placeholder="09" style="text-align:center;font-size:1.2rem;letter-spacing:2px" oninput="timeBox(this,null)" onkeydown="timeBack(event,'paceM')"><span class=m>/km</span></div><small class=m>Si lo dejas vacío, se calcula solo.</small><input id=ppace type="hidden"></div></div>
 <label class=m>Foto</label><label class="g" style="display:block;text-align:center;padding:12px;border:1.5px dashed #666;cursor:pointer">📷 Añadir foto<input id=pf type="file" accept="image/*" style="display:none" onchange="previewEntreno(this)"></label><div id="entrenoPreview"></div>
 <div id="entrenoStatus" style="min-height:20px;font-size:13px;color:#c9e8a8;margin-top:8px"></div>
 <button class="l-btn-primary" style="width:100%;padding:15px;margin-top:10px" type="button" id="btnPublicarEntreno" onclick="post()">Publicar entreno</button><small class=m>La foto se comprime a 800px para que cargue liviano.</small></div>
 <h2>Entrenos recientes</h2>${cards}</div>`;
 };
 window.deletePost=async function(id){
-  if(__isLocalId(id)){if(!confirm('¿Borrar tu entreno guardado en este celular?'))return;let local=JSON.parse(localStorage.getItem('crks_entrenos_local')||'[]').filter(x=>x.id!==id);localStorage.setItem('crks_entrenos_local',JSON.stringify(local));await render();return;}
-  if(!confirm('¿Borrar tu entreno?'))return;try{var r=await sb.from('posts').delete().eq('id',id).eq('user_id',me.id);if(r.error)throw r.error;await render();}catch(e){alert('No se pudo borrar. Error: '+e.message);}
+  var isLocal=(String(id).indexOf('local-')===0||String(id).indexOf('sb-')===0);
+  if(isLocal){if(!confirm('¿Borrar tu entreno guardado en este celular?'))return;try{var local=JSON.parse(localStorage.getItem('crks_entrenos_local')||'[]').filter(function(x){return x.id!==id;});localStorage.setItem('crks_entrenos_local',JSON.stringify(local));}catch(e){}try{var rx=JSON.parse(localStorage.getItem('crks_reactions')||'{}');if(rx[id]){delete rx[id];localStorage.setItem('crks_reactions',JSON.stringify(rx));}}catch(e){}await render();return;}
+  if(!confirm('¿Borrar tu entreno?'))return;
+  try{var r=await sb.from('posts').delete().eq('id',id).eq('user_id',me.id);if(r.error)throw r.error;try{var local2=JSON.parse(localStorage.getItem('crks_entrenos_local')||'[]').filter(function(x){return x.id!==id;});localStorage.setItem('crks_entrenos_local',JSON.stringify(local2));}catch(e){}await render();}
+  catch(e){alert('No se pudo borrar en Supabase. Error: '+e.message+'\n\nSi dice RLS / policy, pega el SQL de delete que te doy abajo.');}
 };
 })();
-
 </script>
 
 </body></html>
