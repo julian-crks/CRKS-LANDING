@@ -369,6 +369,33 @@ window.getPosts=async function(limit){
       if(me&&prof){(fromSb||[]).forEach(function(x){if(!x.profiles&&x.user_id===me.id)x.profiles=prof;});}
     }
   }catch(e){}
+  // LIKE + COMENTAR: traer likes y comments por separado (sin join) y pegarlos a cada post
+  try{
+    if(fromSb&&fromSb.length){
+      var _ids=fromSb.map(function(x){return x.id;});
+      var _likesBy={};try{var _rl=await sb.from('likes').select('*').in('post_id',_ids);if(_rl&&!_rl.error&&_rl.data){_rl.data.forEach(function(l){_likesBy[l.post_id]=_likesBy[l.post_id]||[];_likesBy[l.post_id].push(l);});}}catch(e){}
+      var _cmtsBy={};try{var _rc=await sb.from('comments').select('*').in('post_id',_ids);if(_rc&&!_rc.error&&_rc.data){_rc.data.forEach(function(c){c.body=c.body||c.content||c.text||c.comment||'';_cmtsBy[c.post_id]=_cmtsBy[c.post_id]||[];_cmtsBy[c.post_id].push(c);});}}catch(e){}
+      fromSb.forEach(function(x){
+        var _lk=_likesBy[x.id]||[];var _cm=_cmtsBy[x.id]||[];
+        // Unir con los que ya venían (si el join viejo los trajo), sin duplicar por user_id / id
+        var _allLikes=(x.likes||[]).slice();_lk.forEach(function(l){if(!_allLikes.some(function(z){return z.user_id===l.user_id&&z.post_id===l.post_id;}))_allLikes.push(l);});x.likes=_allLikes;
+        var _allCmts=(x.comments||[]).slice();_cm.forEach(function(c){if(!_allCmts.some(function(z){return String(z.id)===String(c.id);}))_allCmts.push(c);});x.comments=_allCmts;
+      });
+      // Perfiles de quienes comentaron
+      try{
+      var _cids=[];
+      (fromSb||[]).forEach(function(x){(x.comments||[]).forEach(function(c){if(c.user_id&&_cids.indexOf(c.user_id)<0)_cids.push(c.user_id);});});
+      if(_cids.length){
+        var _pc=await sb.from('profiles').select('id,name,avatar_url').in('id',_cids);
+        if(_pc&&!_pc.error&&_pc.data){
+          var _cmap={};_pc.data.forEach(function(pp){_cmap[pp.id]=pp;});
+          (fromSb||[]).forEach(function(x){(x.comments||[]).forEach(function(c){if(!c.profiles&&_cmap[c.user_id])c.profiles=_cmap[c.user_id];if(!c.profiles&&me&&c.user_id===me.id)c.profiles=prof;});});
+        }
+      }
+    }catch(e){}
+
+    }
+  }catch(e){}
   fromSb.sort(function(a,b){return new Date(b.created_at)-new Date(a.created_at);});
   return fromSb.slice(0,limit||50);
 };
@@ -442,15 +469,29 @@ document.addEventListener('click',function(e){if(e.target&&e.target.closest){var
 // --- Reaccionar / comentar corto ---
 window.like=async function(id,l){
   if(!me){try{await sb.auth.getSession();}catch(e){}try{await loadMe();}catch(e){}if(!me)return alert('Inicia sesión para reaccionar');}
-  try{var r=await(l?sb.from('likes').delete().match({post_id:id,user_id:me.id}):sb.from('likes').insert({post_id:id,user_id:me.id}));if(r.error)throw r.error;await render();}
-  catch(e){alert('No se pudo reaccionar. Error exacto: '+e.message+'\n\nSi dice RLS / policy, pega el SQL de APAGAR RLS de likes.');}
+  try{
+    var r;
+    if(l){r=await sb.from('likes').delete().match({post_id:id,user_id:me.id});if(r.error)throw r.error;}
+    else{
+      r=await sb.from('likes').insert({post_id:id,user_id:me.id});
+      // Si ya le habías dado like (duplicado), lo quitamos para que actúe como toggle
+      if(r.error&&/duplicate|unique|already|existe/i.test(r.error.message||'')){var rd=await sb.from('likes').delete().match({post_id:id,user_id:me.id});if(rd.error)throw rd.error;}
+      else if(r.error)throw r.error;
+    }
+    await render();
+  }catch(e){alert('No se pudo reaccionar. Error exacto: '+e.message+'\n\nSi dice RLS / policy, pega el SQL de APAGAR RLS de likes. Si dice columna, mándame captura de este error.');}
 };
 window.cmtInline=async function(id){
   var inp=document.getElementById('cmt-'+id);if(!inp)return;var body=(inp.value||'').trim();
   if(!body)return alert('Escribe un comentario corto');if(body.length>120)return alert('Máx. 120 caracteres');
   if(!me){try{await sb.auth.getSession();}catch(e){}try{await loadMe();}catch(e){}if(!me)return alert('Inicia sesión para comentar');}
-  try{var r=await sb.from('comments').insert({post_id:id,user_id:me.id,body:body});if(r.error)throw r.error;inp.value='';await render();}
-  catch(e){alert('No se pudo comentar. Error exacto: '+e.message+'\n\nSi dice RLS / policy, pega el SQL de APAGAR RLS de comments.');}
+  try{
+    var lastErr=null,saved=false;
+    var _tries=[{post_id:id,user_id:me.id,body:body},{post_id:id,user_id:me.id,content:body},{post_id:id,user_id:me.id,text:body},{post_id:id,user_id:me.id,comment:body},{post_id:id,user_id:me.id,body:body,content:body}];
+    for(var _ti=0;_ti<_tries.length;_ti++){try{var _r=await sb.from('comments').insert(_tries[_ti]);if(!_r.error){saved=true;break;}lastErr=_r.error;}catch(e){lastErr=e;if(/column|columna|does not exist|no existe/i.test(e.message||''))continue;else break;}}
+    if(!saved)throw lastErr||new Error('No se pudo guardar el comentario');
+    inp.value='';await render();
+  }catch(e){alert('No se pudo comentar. Error exacto: '+e.message+'\n\nSi dice RLS / policy, pega el SQL de APAGAR RLS de comments. Si dice columna, mándame captura de este error.');}
 };
 // --- Entrenos: mismo diseño, con Tiempo 10 : 10 : 10 y Pace 05 : 09 ---
 V.feed=async()=>{
