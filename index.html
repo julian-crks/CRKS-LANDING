@@ -1770,6 +1770,24 @@ async function crksHandleRecoveryCode(){
   }catch(e){}
   return false;
 }
+function crksRescueLink(){
+  var inp=document.getElementById('crks-old-link');
+  var val=inp?inp.value.trim():'';
+  if(!val) return alert('Pega aquí el link completo que te llegó al correo, el que dice localhost:3000');
+  var hashIdx=val.indexOf('#');
+  var qIdx=val.indexOf('?code=');
+  if(hashIdx>=0){
+    var hash=val.slice(hashIdx);
+    window.location.href='https://crks-team.vercel.app/'+hash;
+    return;
+  }
+  if(qIdx>=0){
+    var qs=val.slice(qIdx);
+    window.location.href='https://crks-team.vercel.app/'+qs;
+    return;
+  }
+  alert('Ese link no tiene token. Copia el link completo del correo, desde https o localhost hasta el final.');
+}
 function crksIsRecovery(){
   try{
     var h=window.location.hash||'';var s=window.location.search||'';
@@ -1797,7 +1815,7 @@ try{
         var div=document.createElement('div');
         div.id='crks-forgot';
         div.style='margin:8px 0 2px;text-align:center';
-        div.innerHTML='<span style="color:#c9e8a8;font-size:14px">¿Olvidaste tu contraseña? <b onclick="crksForgotPassword()" style="color:#A6FF00;cursor:pointer;text-decoration:underline">Recuperar cuenta</b></span><div style="font-size:11px;color:#888;margin-top:4px">Te enviamos un correo de verificación para crear una contraseña nueva.</div>';
+        div.innerHTML='<span style="color:#c9e8a8;font-size:14px">¿Olvidaste tu contraseña? <b onclick="crksForgotPassword()" style="color:#A6FF00;cursor:pointer;text-decoration:underline">Recuperar cuenta</b></span><div style="font-size:11px;color:#888;margin-top:4px">Te enviamos un correo de verificación para crear una contraseña nueva.</div><div style="background:#111;border:1px dashed #A6FF00;border-radius:12px;padding:10px;margin-top:10px;text-align:left"><div style="font-size:12px;font-weight:800;color:#A6FF00">¿El link te abrió localhost:3000?</div><div style="font-size:11px;opacity:.8;margin:4px 0">Pega aquí el link viejo y lo rescato:</div><input id="crks-old-link" placeholder="Pega aquí el link del correo..." style="width:100%;box-sizing:border-box;background:#000;color:#fff;border:1px solid #333;border-radius:8px;padding:9px;font-size:12px"><button onclick="crksRescueLink()" style="width:100%;margin-top:8px;background:#A6FF00;color:#000;border:0;border-radius:999px;padding:10px;font-weight:900">USAR ESE LINK Y ABRIR RECUPERAR</button></div>';
         toggle.parentNode.insertBefore(div, toggle.nextSibling);
       }
     }catch(e){}
