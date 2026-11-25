@@ -216,27 +216,51 @@ async function cmtInline(id){const inp=document.getElementById('cmt-'+id);if(!in
 async function deletePost(id){if(!confirm('¿Borrar tu entreno?'))return;try{const r=await sb.from('posts').delete().eq('id',id).eq('user_id',me.id);if(r.error)throw r.error;render();}catch(e){alert('No se pudo borrar. Error: '+e.message);}}
 
 V.rank=async()=>{
- const ps=await getPosts(80);
+ const selSport=(window.__rankSport||'Running');
+ const ps=await getPosts(200);
  const pr=(await sb.from('profiles').select('id,name,avatar_url,streak')).data||[];
- const mp={};pr.forEach(x=>{mp[x.id]=x});
+ const mp={};pr.forEach(x=>{mp[x.id]=x;});
+ function normSport(s){
+   s=String(s||'').toLowerCase();
+   if(s.includes('mtb')||s.includes('montaña')||s.includes('montana'))return 'MTB';
+   if(s.includes('ciclismo')||s.includes('bici')||s.includes('bike')||s.includes('ruta'))return 'Ciclismo';
+   if(s.includes('nataci')||s.includes('swim')||s.includes('piscina')||s.includes('mar'))return 'Natación';
+   if(s.includes('trail'))return 'Trail';
+   if(s.includes('running')||s.includes('run')||s.includes('correr'))return 'Running';
+   return '';
+ }
+ const sports=[{k:'Running',e:'🏃'},{k:'Trail',e:'🥾'},{k:'Ciclismo',e:'🚴'},{k:'MTB',e:'🚵'},{k:'Natación',e:'🏊'}];
  const agg={};
  (ps||[]).forEach(p=>{
-  const uid=p.user_id||'sin-usuario'; if(!agg[uid]) agg[uid]={uid, name:(mp[uid]?.name)||(p.profiles?.name)||'Crack', streak:mp[uid]?.streak||p.profiles?.streak||0, run:0, bike:0, swim:0, trail:0, fuerzaMin:0, movMin:0, kilos:0, workouts:0, totalMin:0};
-  const a=agg[uid]; a.workouts++; a.totalMin+=+p.minutes||0;
-  const s=(p.sport||'').toLowerCase();
-  if(s.includes('running')||s==='run') a.run+=+p.km||0;
-  else if(s.includes('ciclismo')||s.includes('bici')||s.includes('bike')) a.bike+=+p.km||0;
-  else if(s.includes('nataci')) a.swim+=+p.km||0;
-  else if(s.includes('trail')) a.trail+=+p.km||0;
-  else if(s.includes('fuerza')) a.fuerzaMin+=+p.minutes||0;
-  else if(s.includes('movilidad')) a.movMin+=+p.minutes||0;
-  const mk=/Kilos:\s*([0-9.]+)/.exec(p.body||''); if(mk) a.kilos+=+mk[1];
+   const ns=normSport(p.sport);if(!ns||ns!==selSport)return;
+   const uid=p.user_id||'sin-usuario';if(!agg[uid])agg[uid]={uid,name:(mp[uid]?.name)||(p.profiles?.name)||'Crack',avatar:(mp[uid]?.avatar_url)||(p.profiles?.avatar_url)||'',streak:mp[uid]?.streak||p.profiles?.streak||0,count:0,km:0,minutes:0};
+   const a=agg[uid];a.count++;a.km+=+p.km||0;a.minutes+=+p.minutes||0;
  });
- const arr=Object.values(agg);
- const table=(title, key, fmt, emoji)=>{const list=arr.filter(x=>x[key]>0).sort((a,b)=>b[key]-a[key]); if(!list.length) return `<h2>${emoji} ${title}</h2><p class=m>Aún nadie ha publicado en ${title}.</p>`; return `<h2>${emoji} ${title}</h2><div style="overflow:auto"><table class="rank-table"><tr><th>#</th><th>Crack</th><th>🔥 Racha</th><th>${title}</th><th>Entrenos</th></tr>${list.map((a,i)=>`<tr><td>${i+1}</td><td><b>${esc(a.name)}</b></td><td>🔥 ${a.streak}</td><td><b>${fmt(a[key])}</b></td><td>${a.workouts}</td></tr>`).join('')}</table></div>`};
- return '<h2>🏆 Ranking CRKS - Separado por deporte</h2><p class=m>Cada modalidad suma aparte. Un crack puede liderar Running y otro Ciclismo, no se mezclan.</p>'+table('Running','run',v=>v.toFixed(1)+' km','🏃')+table('Ciclismo','bike',v=>v.toFixed(1)+' km','🚴')+table('Natación','swim',v=>v.toFixed(1)+' km','🏊')+table('Trail','trail',v=>v.toFixed(1)+' km','🥾')+table('Fuerza','fuerzaMin',v=>fmtDigital(v),'🏋️')+table('Movilidad','movMin',v=>fmtDigital(v),'🧘')+`<h2>⚖️ Kilos totales - Fuerza</h2><div style="overflow:auto"><table class="rank-table"><tr><th>#</th><th>Crack</th><th>Kilos</th></tr>${arr.filter(x=>x.kilos>0).sort((a,b)=>b.kilos-a.kilos).map((a,i)=>`<tr><td>${i+1}</td><td><b>${esc(a.name)}</b></td><td><b>${a.kilos} kg</b></td></tr>`).join('')||'<tr><td colspan=3>Aún nadie ha registrado kilos.</td></tr>'}</table></div>`;
+ const arr=Object.values(agg).sort((a,b)=>(b.count-a.count)||(b.km-a.km)||(b.minutes-a.minutes));
+ const pills=sports.map(s=>`<span onclick="setRankSport('${s.k}')" style="display:inline-flex;align-items:center;gap:6px;padding:9px 14px;border-radius:999px;cursor:pointer;font-size:13px;font-weight:${s.k===selSport?'800':'600'};background:${s.k===selSport?'#A6FF00':'#1a1a1a'};color:${s.k===selSport?'#000':'#fff'};border:1px solid ${s.k===selSport?'#A6FF00':'#444'};white-space:nowrap">${s.e} ${s.k}</span>`).join('');
+ const selMeta=sports.find(s=>s.k===selSport)||sports[0];
+ function av(a,sz){return a.avatar?`<img loading="lazy" src="${esc(a.avatar)}" style="width:${sz}px;height:${sz}px;border-radius:50%;object-fit:cover;border:2px solid #A6FF00">`:`<div style="width:${sz}px;height:${sz}px;border-radius:50%;background:#222;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:${Math.round(sz/2.4)}px;border:2px solid #A6FF00">${esc((a.name||'C').charAt(0).toUpperCase())}</div>`;}
+ function statLine(a){if(selSport==='Natación')return `${a.count} entrenos • ${(a.km||0).toFixed(1)} km • ${fmtDigital(a.minutes)}`;return `${a.count} entrenos • ${(a.km||0).toFixed(1)} km • ${fmtDigital(a.minutes)}`;}
+ let podium='';
+ if(arr.length>=3){
+   const first=arr[0],second=arr[1],third=arr[2];
+   podium=`<div style="position:relative;background:linear-gradient(180deg,rgba(166,255,0,.14),rgba(0,0,0,0) 70%),radial-gradient(ellipse at 50% 0%,rgba(255,255,255,.18),transparent 60%);border:1px solid #222;border-radius:18px;padding:18px 10px 14px;margin:14px 0;overflow:hidden">
+   <div style="text-align:center;font-size:11px;letter-spacing:2px;opacity:.7">PODIO · ${esc(selSport.toUpperCase())}</div>
+   <div style="display:flex;align-items:flex-end;justify-content:center;gap:10px;margin-top:12px">
+     <div style="flex:1;text-align:center"><div style="font-size:22px">🥈</div><div style="display:flex;justify-content:center;margin:6px 0">${av(second,56)}</div><div style="font-weight:800;font-size:13px;line-height:1.2">${esc(second.name)}</div><div style="font-size:11px;opacity:.8;margin-top:3px">${statLine(second)}</div><div style="font-size:11px;opacity:.7">🔥 ${second.streak} días</div><div style="background:#1a1a1a;border:1px solid #333;border-radius:10px 10px 0 0;padding:14px 4px 8px;margin-top:8px;font-weight:900">2</div></div>
+     <div style="flex:1.25;text-align:center"><div style="font-size:28px">👑</div><div style="display:flex;justify-content:center;margin:6px 0">${av(first,76)}</div><div style="font-weight:900;font-size:15px;line-height:1.2">${esc(first.name)}</div><div style="font-size:11px;opacity:.8;margin-top:3px">${statLine(first)}</div><div style="font-size:11px;opacity:.7">🔥 ${first.streak} días</div><div style="background:#A6FF00;color:#000;border-radius:12px 12px 0 0;padding:22px 4px 10px;margin-top:8px;font-weight:900;font-size:18px">1</div></div>
+     <div style="flex:1;text-align:center"><div style="font-size:22px">🥉</div><div style="display:flex;justify-content:center;margin:6px 0">${av(third,56)}</div><div style="font-weight:800;font-size:13px;line-height:1.2">${esc(third.name)}</div><div style="font-size:11px;opacity:.8;margin-top:3px">${statLine(third)}</div><div style="font-size:11px;opacity:.7">🔥 ${third.streak} días</div><div style="background:#1a1a1a;border:1px solid #333;border-radius:10px 10px 0 0;padding:10px 4px 8px;margin-top:8px;font-weight:900">3</div></div>
+   </div></div>`;
+ } else if(arr.length>0){
+   podium=`<div style="background:#111;border:1px solid #222;border-radius:16px;padding:16px;margin:14px 0;text-align:center"><div style="font-size:26px">👑</div><div style="display:flex;justify-content:center;margin:8px 0">${av(arr[0],68)}</div><div style="font-weight:900">${esc(arr[0].name)}</div><div style="font-size:12px;opacity:.8;margin-top:4px">${statLine(arr[0])} • 🔥 ${arr[0].streak} días</div><div style="font-size:12px;opacity:.7;margin-top:6px">Faltan cracks para completar el podio. Publica tu entreno y sube.</div></div>`;
+ }
+ const rest=arr.slice(arr.length>=3?3:1).map((a,i)=>{
+   const pos=(arr.length>=3?4:2)+i;
+   return `<div style="display:flex;align-items:center;gap:10px;background:#111;border:1px solid #222;border-radius:14px;padding:10px 12px;margin-bottom:8px"><div style="width:28px;text-align:center;font-weight:900;opacity:.9">${pos}</div>${av(a,40)}<div style="flex:1;min-width:0"><div style="font-weight:800;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(a.name)}</div><div style="font-size:12px;opacity:.8">${statLine(a)}</div></div><div style="text-align:right;font-size:11px;opacity:.8">🔥 ${a.streak} días</div></div>`;
+ }).join('');
+ return `<div><h2 style="text-align:center;margin:6px 0 2px">🏆 RANKING CRKS</h2><p class="m" style="text-align:center">Se compara todos los entrenos publicados, por deporte. Cada deporte suma aparte.</p><div style="display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin:12px 0">${pills}</div><div style="text-align:center"><span style="display:inline-block;background:#1a1a1a;border:1px solid #333;border-radius:999px;padding:7px 12px;font-size:12px;font-weight:700">${selMeta.e} ${esc(selSport)} · ${arr.length} crack${arr.length===1?'':'s'} con entrenos publicados</span></div>${podium}${arr.length> (arr.length>=3?3:1)?`<h3 style="margin:16px 0 10px">Del ${arr.length>=3?'4º':'2º'} al ${Math.min(arr.length,10)}º</h3>${rest}`:''}${!arr.length?`<div class="card" style="text-align:center;margin-top:14px"><p style="font-weight:800">Aún nadie ha publicado en ${esc(selSport)}.</p><p class="m">Publica tu primer entreno en ${esc(selSport)} y sé el primero del podio.</p><button class="l-btn-primary" onclick="go('feed')">Publicar entreno →</button></div>`:''}<p class="m" style="text-align:center;margin-top:12px">Orden: 1º más entrenos publicados en ${esc(selSport)} · En empate, más km · Luego, más tiempo. Solo cuentan entrenos publicados, no borrados.</p></div>`;
 };
-
+window.setRankSport=function(s){window.__rankSport=s;render();};
 V.meet=async()=>{
  const ms=await getMeetups();
  return`<div class=card><h3>Proponer encuentro</h3><p class=m>Libre para cualquiera. Cualquier crack puede invitar, no solo Admin. Al crearlo, todos lo ven.</p><input id=mt placeholder="Título (ej. Rodada del domingo)"><input id=mp placeholder="Lugar"><input id=md type=datetime-local><button onclick="mk()">Crear encuentro</button></div>`+
