@@ -1736,11 +1736,11 @@ async function crksForgotPassword(){
   if(!email.includes('@'))return alert('Pon un correo válido, Ej: runcrackscolombia@gmail.com');
   var msgEl=document.getElementById('msg');if(msgEl)msgEl.textContent='Enviando correo de verificación...';
   try{
-    var redirectTo=window.location.origin+window.location.pathname;
+    var redirectTo='https://crks-team.vercel.app/';
     var r=await sb.auth.resetPasswordForEmail(email,{redirectTo:redirectTo});
     if(r.error)throw r.error;
     if(msgEl)msgEl.textContent='Listo ✅ Revisa tu correo '+email+'. Te enviamos un link para crear una contraseña nueva. Revisa también Spam.';
-    alert('Listo ✅\n\nTe enviamos un correo de verificación a:\n'+email+'\n\n1. Abre tu correo (revisa también Spam / Promociones)\n2. Dale al link Recuperar contraseña\n3. Pon tu contraseña nueva\n4. Entra con esa contraseña.\n\nSi es la cuenta Admin, usa runcrackscolombia@gmail.com');
+    alert('Listo ✅\n\nTe enviamos un correo NUEVO a:\n'+email+'\n\nIMPORTANTE: No uses el link viejo que dice localhost:3000, ese no sirve.\n\n1. Abre este correo nuevo (revisa Spam)\n2. Dale al link - debe abrir crks-team.vercel.app\n3. Pon tu contraseña nueva\n4. Entra con esa contraseña.');
   }catch(e){
     if(msgEl)msgEl.textContent='No se pudo enviar: '+e.message;
     alert('No se pudo enviar el correo.\n\nError: '+e.message+'\n\nSi el correo no está registrado, crea la cuenta con Regístrate primero.');
@@ -1759,6 +1759,17 @@ async function crksSetNewPassword(){
     location.reload();
   }catch(e){alert('No se pudo cambiar: '+e.message+'\n\nVuelve a pedir el link en Olvidé mi contraseña. El link vence en 1 hora.');}
 }
+async function crksHandleRecoveryCode(){
+  try{
+    var qs=new URLSearchParams(window.location.search);
+    var code=qs.get('code');
+    if(code){
+      var r=await sb.auth.exchangeCodeForSession(code);
+      if(!r.error){try{window.history.replaceState({},'',window.location.pathname);}catch(e){} return true;}
+    }
+  }catch(e){}
+  return false;
+}
 function crksIsRecovery(){
   try{
     var h=window.location.hash||'';var s=window.location.search||'';
@@ -1772,7 +1783,8 @@ try{
     await _origRenderV22();
     try{
       // Si es recuperación, mostrar formulario de contraseña nueva
-      if(crksIsRecovery()){
+      if(window.location.search.includes('code=')){await crksHandleRecoveryCode();}
+      if(crksIsRecovery()||window.location.search.includes('type=recovery')){
         var app=document.getElementById('app');
         if(app&&!document.getElementById('np1')){
           app.innerHTML='<div class="auth-screen"><img class="auth-logo" src="'+(typeof LOGO_URL!=='undefined'?LOGO_URL:'')+'" alt="CRKS"><div class="auth-club">Wellness Club</div><div class="auth-fields"><div style="background:#111;border:2px solid #A6FF00;border-radius:18px;padding:20px 16px"><div style="font-size:11px;letter-spacing:2px;color:#A6FF00;font-weight:900">RECUPERAR CONTRASEÑA</div><h2 style="margin:8px 0 4px">Crea tu contraseña nueva</h2><p class=m style="margin:0">Ya verificamos tu correo. Pon tu contraseña nueva y entra.</p><label class="auth-label" for="np1">Contraseña nueva:</label><div class="auth-field"><input id="np1" type="password" placeholder="Mínimo 6 caracteres"></div><label class="auth-label" for="np2">Repite la contraseña nueva:</label><div class="auth-field"><input id="np2" type="password" placeholder="Repite la contraseña"></div><button class="auth-btn" onclick="crksSetNewPassword()">GUARDAR CONTRASEÑA NUEVA</button><p class="auth-msg" id="msg"></p><p class=m style="font-size:12px">Si el link ya venció, vuelve al inicio y pide otro en ¿Olvidaste tu contraseña?</p></div></div></div>';
