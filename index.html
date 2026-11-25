@@ -1370,4 +1370,151 @@ V.eventos=async()=>{
   return '<h2>Eventos</h2><p class=m>Eventos oficiales CRKS · Ordenados por fecha, el más próximo primero.<br>Separa tu cupo con el 50% o asegúralo con pago completo.</p>'+adminBar+mandalayHtml+'<h3 style=margin:16px 0 10px>Próximos eventos oficiales · En orden de fecha</h3>'+(otros||empty);
 };
 </script>
+
+<script>
+// === MERCH V20 - Visible para todos + Borrar TODO + Lo último en Inicio (sin tocar Inicio) ===
+function crksMerchDeletedList(){try{return JSON.parse(localStorage.getItem('crks_merch_deleted')||'[]');}catch(e){return [];}}
+function crksMerchIsDeleted(name){return crksMerchDeletedList().includes(String(name||''));}
+function crksGetAllMerchSyncLocal(){
+  var out=[];
+  try{var base=(typeof MERCH!=='undefined'?MERCH:[]).map(function(m){return {name:m.name,desc:m.desc,img:m.img,price:m.price||'',from:'oficial',created_at:'2025-01-01'};});out=out.concat(base);}catch(e){}
+  try{out=out.concat(crksGetAdminProducts().map(function(p){return {name:p.name,desc:p.desc,img:p.img,price:p.price||'',from:'admin-local',created_at:p.created_at||''};}));}catch(e){}
+  return out;
+}
+async function crksGetAllMerch(){
+  var seen={};var all=[];
+  // 1) Local + oficiales (si no están borrados)
+  crksGetAllMerchSyncLocal().forEach(function(m){if(crksMerchIsDeleted(m.name))return;var k=String(m.name).toLowerCase().trim();if(seen[k])return;seen[k]=1;all.push(m);});
+  // 2) Supabase products
+  try{var _rp=await sb.from('products').select('*').order('created_at',{ascending:false}).limit(50);if(!_rp.error&&_rp.data){_rp.data.forEach(function(r){if(!r||!r.name)return;if(crksMerchIsDeleted(r.name))return;var k=String(r.name).toLowerCase().trim();if(seen[k]){var ex=all.find(function(x){return x.name.toLowerCase().trim()===k;});if(ex){if(!ex.sbId)ex.sbId=r.id;if(!ex.img&&r.image_url)ex.img=r.image_url;if(!ex.created_at&&r.created_at)ex.created_at=r.created_at;}return;}seen[k]=1;all.push({name:r.name,desc:r.description||r.desc||'',img:r.image_url||r.img||'',price:r.price||'',from:'supabase',sbId:r.id,created_at:r.created_at||''});});}}catch(e){}
+  // 3) Posts [PRODUCTO_CRKS] - respaldo que SÍ ven todos (como Eventos)
+  try{
+    var _gp=await getPosts(200);var evs=(_gp||[]).filter(function(p){return (p.body||'').includes('[PRODUCTO_CRKS]');});
+    evs.forEach(function(p){
+      var lines=String(p.body||'').split('\n');var title=lines[0].replace('[PRODUCTO_CRKS]','').trim();if(!title||crksMerchIsDeleted(title))return;
+      var desc='',price='';lines.forEach(function(l){if(l.startsWith('Descripción:'))desc=l.replace('Descripción:','').trim();else if(l.startsWith('Precio:'))price=l.replace('Precio:','').trim();else if(!l.includes('[PRODUCTO_CRKS]')&&!l.startsWith('Descripción:')&&!l.startsWith('Precio:'))desc+=l+' ';});
+      var k=title.toLowerCase().trim();if(seen[k]){var ex2=all.find(function(x){return x.name.toLowerCase().trim()===k;});if(ex2){if(!ex2.postId)ex2.postId=p.id;if(!ex2.img&&p.image_url)ex2.img=p.image_url;}return;}seen[k]=1;all.push({name:title,desc:desc.trim(),img:p.image_url||'',price:price,from:'post',postId:p.id,created_at:p.created_at||''});
+    });
+  }catch(e){}
+  // Orden: más recientes primero (por created_at, oficiales al final si no tienen fecha)
+  all.sort(function(a,b){
+    var da=a.created_at?new Date(a.created_at).getTime():0, db=b.created_at?new Date(b.created_at).getTime():0;
+    return db-da;
+  });
+  return all;
+}
+// Guardar prenda V20: products + posts [PRODUCTO_CRKS] + local, con foto garantizada
+crksAddProductAdmin=async function(){
+  if(typeof crksIsAdmin==='function'&&!crksIsAdmin())return alert('Solo la cuenta '+ (typeof CRKS_ADMIN_EMAIL!=='undefined'?CRKS_ADMIN_EMAIL:'runcrackscolombia@gmail.com') +' puede agregar productos.');
+  var name=(document.getElementById('ap-name')||{}).value||'';name=name.trim();if(!name)return alert('Pon el nombre de la prenda, Ej: Ref. NUEVA');
+  var desc=(document.getElementById('ap-desc')||{}).value||'';var price=(document.getElementById('ap-price')||{}).value||'';
+  var fileEl=document.getElementById('ap-photo');var file=fileEl&&fileEl.files&&fileEl.files[0]?fileEl.files[0]:null;
+  var photo='';
+  if(file){
+    try{photo=await up(file);}catch(e){photo='';}
+    if(!photo){try{photo=await crksFileToDataUrl(file);}catch(e){photo='';}}
+  }
+  if(file&&!photo)return alert('No se pudo anexar la foto. Intenta con otra foto más liviana.');
+  // Si estaba borrada antes, quitarla de borrados para que vuelva a aparecer
+  try{var del=crksMerchDeletedList().filter(function(n){return n!==name;});localStorage.setItem('crks_merch_deleted',JSON.stringify(del));}catch(e){}
+  var p={name:name,desc:desc,price:price,img:photo,created_at:new Date().toISOString()};
+  var arr=crksGetAdminProducts();arr.push(p);try{localStorage.setItem('crks_products_admin',JSON.stringify(arr));}catch(e){}
+  var errP=null, errPost=null;
+  try{var r1=await sb.from('products').insert({name:name,description:desc,price:price,image_url:photo||null});if(r1.error){var r1b=await sb.from('products').insert({name:name,description:desc,price:price});if(r1b.error)errP=r1b.error;}}catch(e){errP=e;}
+  try{
+    var body='[PRODUCTO_CRKS] '+name+'\nDescripción: '+desc+'\nPrecio: '+price;
+    var r2=await sb.from('posts').insert({user_id:me.id,sport:'Merch',body:body,km:0,minutes:0,image_url:photo||null});
+    if(r2.error){var r2b=await sb.from('posts').insert({user_id:me.id,sport:'Merch',body:body,km:0,minutes:0});if(r2b.error)errPost=r2b.error;}
+  }catch(e){errPost=e;}
+  if(errP&&errPost)alert('Se guardó en tu celular, pero Supabase bloqueó ambos.\nProducts: '+(errP.message||errP)+'\nPosts: '+(errPost.message||errPost)+'\nPega el SQL de abajo.');
+  else alert('Prenda publicada ✅ Con foto '+(photo?'sí anexada':'sin foto')+'. Ya aparece en Merch para todos.');
+  render();
+};
+async function crksDeleteMerchOne(name, sbId, postId){
+  if(typeof crksIsAdmin==='function'&&!crksIsAdmin())return alert('Solo Admin puede borrar.');
+  if(!confirm('¿Borrar "'+name+'" de Merch? Desaparece para todos.'))return;
+  if(sbId){try{await sb.from('products').delete().eq('id',sbId);}catch(e){}}
+  // Borrar cualquier product con ese nombre
+  try{var _all=await sb.from('products').select('id,name');if(_all.data){for(var i=0;i<_all.data.length;i++){if(String(_all.data[i].name)===String(name))await sb.from('products').delete().eq('id',_all.data[i].id);}}}catch(e){}
+  if(postId){try{await sb.from('likes').delete().eq('post_id',postId);}catch(e){}try{await sb.from('comments').delete().eq('post_id',postId);}catch(e){}try{await sb.from('posts').delete().eq('id',postId);}catch(e){}}
+  try{
+    var _gp=await getPosts(200);var evs=(_gp||[]).filter(function(p){return (p.body||'').includes('[PRODUCTO_CRKS] '+name);});
+    for(var j=0;j<evs.length;j++){try{await sb.from('likes').delete().eq('post_id',evs[j].id);}catch(e){}try{await sb.from('comments').delete().eq('post_id',evs[j].id);}catch(e){}await sb.from('posts').delete().eq('id',evs[j].id);}
+  }catch(e){}
+  try{var arr=crksGetAdminProducts().filter(function(x){return String(x.name)!==String(name);});localStorage.setItem('crks_products_admin',JSON.stringify(arr));}catch(e){}
+  // Marcar como borrada para que ni las 3 oficiales vuelvan a aparecer
+  try{var del=crksMerchDeletedList();if(!del.includes(name)){del.push(name);localStorage.setItem('crks_merch_deleted',JSON.stringify(del));}}catch(e){}
+  render();
+}
+async function crksClearMerchAll(){
+  if(typeof crksIsAdmin==='function'&&!crksIsAdmin())return alert('Solo Admin puede borrar.');
+  if(!confirm('¿Borrar TODAS las prendas de Merch, INCLUIDAS Aurora, Cromo y Lava? Merch queda vacío para todos. Puedes restaurar las 3 oficiales después.'))return;
+  try{var _e=await sb.from('products').select('id');if(!_e.error&&_e.data){for(var i=0;i<_e.data.length;i++){await sb.from('products').delete().eq('id',_e.data[i].id);}}}catch(e){}
+  try{var _gp=await getPosts(200);var evs=(_gp||[]).filter(function(p){return (p.body||'').includes('[PRODUCTO_CRKS]');});for(var j=0;j<evs.length;j++){try{await sb.from('likes').delete().eq('post_id',evs[j].id);}catch(e){}try{await sb.from('comments').delete().eq('post_id',evs[j].id);}catch(e){}await sb.from('posts').delete().eq('id',evs[j].id);}}catch(e){}
+  try{localStorage.removeItem('crks_products_admin');}catch(e){}
+  // Marcar las 3 oficiales + todas las que había como borradas
+  try{
+    var allNames=[];try{(typeof MERCH!=='undefined'?MERCH:[]).forEach(function(m){allNames.push(m.name);});}catch(e){}
+    try{crksGetAdminProducts().forEach(function(m){allNames.push(m.name);});}catch(e){}
+    var cur=crksMerchDeletedList();allNames.forEach(function(n){if(!cur.includes(n))cur.push(n);});
+    // También borrar nombres que vengan de Supabase ya borrados arriba, pero guardar al menos las 3
+    localStorage.setItem('crks_merch_deleted',JSON.stringify(cur));
+  }catch(e){}
+  alert('Merch borrado TOTAL ✅ Queda vacío para todos.');
+  render();
+}
+async function crksRestoreMerchOficial(){
+  if(typeof crksIsAdmin==='function'&&!crksIsAdmin())return;
+  try{var del=crksMerchDeletedList().filter(function(n){return !['Ref. AURORA','Ref. CROMO','Ref. LAVA'].includes(n);});localStorage.setItem('crks_merch_deleted',JSON.stringify(del));}catch(e){}
+  alert('Prendas oficiales restauradas ✅ Aurora, Cromo y Lava vuelven a aparecer.');render();
+}
+// --- Merch V20 con borrado total ---
+V.tienda=async()=>{
+  var isAdm=(typeof crksIsAdmin==='function')?crksIsAdmin():false;
+  var all=await crksGetAllMerch();
+  var cards=all.map(function(m){
+    var copy=crksMerchCopy(m.name);
+    var imgHtml=m.img?'<img loading="lazy" decoding="async" src="'+esc(m.img)+'" style="width:100%;height:340px;object-fit:cover;border-radius:16px 16px 0 0;display:block" alt="'+esc(m.name)+'">':'<div style="height:200px;background:linear-gradient(180deg,#1a2a00,#111);display:flex;align-items:center;justify-content:center;font-size:64px;border-radius:16px 16px 0 0">👕</div>';
+    var delBtn=isAdm?'<button class=g style="width:100%;margin-top:8px;color:#ff6b6b" onclick="crksDeleteMerchOne(\''+esc(m.name).replace(/\'/g,"\\'")+'\',\''+(m.sbId||'')+'\',\''+(m.postId||'')+'\')">Borrar prenda (Admin) 🗑️</button>':'';
+    return '<div class=card style="padding:0;overflow:hidden;border:1px solid #333;background:#111"><div style="position:relative">'+imgHtml+'<div style="position:absolute;top:12px;left:12px;background:#A6FF00;color:#000;font-size:11px;font-weight:900;letter-spacing:1px;padding:6px 10px;border-radius:999px">OFICIAL CRKS ⚡</div><div style="position:absolute;top:12px;right:12px;background:rgba(0,0,0,.75);color:#fff;font-size:11px;font-weight:800;padding:6px 10px;border-radius:999px">'+esc(copy.tag)+'</div></div><div style="padding:16px"><h3 style="margin:0;font-size:1.25rem;line-height:1.2">'+esc(m.name)+'</h3><p style="font-weight:800;color:#A6FF00;margin:6px 0 4px;font-size:13px">'+esc(copy.line)+'</p><p class=m style="line-height:1.5;margin:0">'+esc(copy.story)+'</p>'+(m.desc?'<p class=m style="margin:8px 0 0;font-size:12px">• '+esc(m.desc)+'</p>':'')+(m.price?'<p style="margin:8px 0 0"><b>Precio: '+esc(m.price)+'</b></p>':'')+'<a href="'+crksWaLinkFor(m.name)+'" target="_blank" style="display:block;text-align:center;background:#25D366;color:#fff;padding:14px 16px;border-radius:999px;text-decoration:none;font-weight:900;font-size:15px;margin-top:14px">Quiero la mía 💬 → WhatsApp</a><small class=m style="display:block;text-align:center;margin-top:8px">Te atiende CRKS por WhatsApp. Pregunta talla y color.</small>'+delBtn+'</div></div>';
+  }).join('');
+  var hero='<div style="text-align:center;padding:18px 10px 6px"><div style="font-size:11px;letter-spacing:3px;color:#A6FF00;font-weight:900">MERCH OFICIAL ⚡ COMUNIDAD CRKS</div><h1 style="font-size:2rem;line-height:1.05;margin:10px 0 6px">VISTE COMO<br><span style="color:#A6FF00">UN CRACK.</span></h1><p style="font-size:15px;line-height:1.5;opacity:.9;max-width:420px;margin:0 auto">No es ropa. Es identidad.<br>Cuando te pones CRKS, te pones esfuerzo, comunidad y orgullo.<br>La gente lo nota antes de que digas una palabra.</p><div style="display:flex;gap:8px;justify-content:center;margin:14px 0;flex-wrap:wrap"><span style="background:#1a1a1a;border:1px solid #333;border-radius:999px;padding:7px 12px;font-size:12px;font-weight:700">🔥 Entrena con identidad</span><span style="background:#1a1a1a;border:1px solid #333;border-radius:999px;padding:7px 12px;font-size:12px;font-weight:700">🤝 Pertenece al club</span><span style="background:#1a1a1a;border:1px solid #333;border-radius:999px;padding:7px 12px;font-size:12px;font-weight:700">🏅 Representa en cada salida</span></div></div>';
+  var pillars='<div class=card style="background:linear-gradient(180deg,#1a2a00,#111);border:1px solid #A6FF00"><h3 style="margin-top:0">¿Por qué vestir CRKS?</h3><p style="line-height:1.6"><b>1. Identidad.</b> No eres uno más entrenando. Eres un Crack. La prenda lo dice por ti.</p><p style="line-height:1.6"><b>2. Comunidad.</b> En cada rodada, en cada 10K, en cada Trail, nos reconocemos. Te ven y saben: ese es de los nuestros.</p><p style="line-height:1.6"><b>3. Esfuerzo que se ve.</b> Cada kilómetro que sumas merece verse. Vístelo con orgullo.</p><p class=m style="margin-bottom:0">Elige tu referencia abajo y pide la tuya por WhatsApp. Nosotros te confirmamos talla y color.</p></div>';
+  var adminBar=isAdm?'<div class=card style="border:1px solid #ff6b6b"><b>👑 Eres Admin · Control total de Merch</b><p class=m style="margin:6px 0">Puedes borrar CUALQUIER prenda, incluso Aurora, Cromo y Lava. Y puedes borrar TODAS de una vez. Lo nuevo que publiques ahora se guarda en 3 lugares para que SÍ le salga a todos.</p><button class=g style="color:#ff6b6b;width:100%" onclick="crksClearMerchAll()">Borrar TODAS las prendas 🗑️</button>'+(all.length===0?'<button class=g style="width:100%;margin-top:8px" onclick="crksRestoreMerchOficial()">Restaurar Aurora, Cromo y Lava</button>':'')+'</div>':'';
+  var empty=all.length?cards:'<div class=card style=text-align:center><b>✨ Merch limpio.</b><p class=m>No hay prendas publicadas por ahora.</p>'+(isAdm?'<button class=g onclick="crksRestoreMerchOficial()">Restaurar Aurora, Cromo y Lava</button>':'<p class=m>Pronto llegan las oficiales.</p>')+'</div>';
+  return '<h2 style="text-align:center;margin:6px 0">Merch ⚡</h2>'+hero+pillars+adminBar+'<h3 style="margin:16px 0 12px">Nuestras prendas</h3>'+empty+'<div class=card style=text-align:center><b>¿Dudas de tallas o colores?</b><p class=m style="margin:6px 0">Escríbenos, te ayudamos a elegir la tuya.</p><a href="https://wa.me/573132019383?text='+encodeURIComponent('Hola CRKS, quiero info de Merch. ¿Qué tallas y colores tienen?')+'" target="_blank" style="background:#25D366;color:#fff;padding:13px 20px;border-radius:999px;text-decoration:none;font-weight:900;display:inline-block">Hablar por WhatsApp 💬</a></div>';
+};
+// --- Admin V20: texto de Merch actualizado ---
+try{
+  var _origAdminV20=V.admin;
+  V.admin=function(){
+    var h=_origAdminV20();
+    if(typeof crksIsAdmin==='function'&&!crksIsAdmin())return h;
+    h=h.replace('Al guardarla, aparece en Merch para todos, con su botón Quiero la mía → WhatsApp.','Se guarda en Products + Posts + Local para que SÍ le salga a todos, con su botón Quiero la mía → WhatsApp.');
+    return h;
+  };
+}catch(e){}
+// --- INICIO V20: Solo se AGREGA un bloque de Merch al final, NO se toca nada de Inicio ---
+try{
+  var _origHomeV20=V.home;
+  V.home=async function(){
+    var html=await _origHomeV20();
+    try{
+      var allMerch=await crksGetAllMerch();
+      if(!allMerch.length)return html;
+      var last=allMerch[0];
+      var copyLast=crksMerchCopy(last.name);
+      var imgLast=last.img?'<img loading="lazy" decoding="async" src="'+esc(last.img)+'" style="width:100%;height:260px;object-fit:cover;border-radius:14px;display:block">':'';
+      var merchSpot='<div class=card style="border:2px solid #A6FF00;background:linear-gradient(180deg,#1a2a00,#111);overflow:hidden;padding:0">'
+        +'<div style="padding:16px 16px 0;text-align:center"><div style="font-size:11px;letter-spacing:3px;color:#A6FF00;font-weight:900">🔥 LO ÚLTIMO EN MERCH ⚡</div><h3 style="margin:8px 0 4px;font-size:1.4rem;line-height:1.1">VISTE COMO<br><span style="color:#A6FF00">UN CRACK.</span></h3><p style="font-size:13px;line-height:1.5;opacity:.9;margin:0">Lo último que acaba de llegar a Merch. No es ropa, es identidad.</p></div>'
+        +'<div style="padding:14px"><div style="position:relative">'+imgLast+'<div style="position:absolute;top:10px;left:10px;background:#A6FF00;color:#000;font-size:11px;font-weight:900;padding:5px 10px;border-radius:999px">NUEVO ⚡</div></div>'
+        +'<h3 style="margin:12px 0 4px">'+esc(last.name)+'</h3><p style="color:#A6FF00;font-weight:800;font-size:13px;margin:0">'+esc(copyLast.line)+'</p><p class=m style="margin:6px 0;line-height:1.5">'+esc(copyLast.story)+'</p>'
+        +'<a href="'+crksWaLinkFor(last.name)+'" target="_blank" style="display:block;text-align:center;background:#25D366;color:#fff;padding:13px 16px;border-radius:999px;text-decoration:none;font-weight:900;margin-top:10px">Quiero la mía 💬 → WhatsApp</a>'
+        +'<button class=g style="width:100%;margin-top:8px" onclick="go(\'tienda\')">Ver todo Merch ⚡ →</button></div></div>';
+      // Insertar al FINAL de Inicio, sin mover ni borrar nada de lo que ya funciona
+      return html+merchSpot;
+    }catch(e){return html;}
+  };
+}catch(e){}
+</script>
 </body></html>
