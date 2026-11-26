@@ -1948,4 +1948,117 @@ try{
   };
 }catch(e){}
 </script>
+
+<script>
+// === EVENTOS V28 - Llave nueva que ningún código viejo borra + Diagnóstico en pantalla ===
+// La llave vieja crks_eventos_admin la borran varios códigos viejos (limpieza V19, borrar todo, etc).
+// V28 usa crks_eventos_v28, que solo V28 escribe y lee. Así nada viejo lo puede borrar.
+function crksV28Read(){
+  var out=[];
+  try{ var a=JSON.parse(localStorage.getItem('crks_eventos_v28')||'[]'); if(Array.isArray(a)) out=out.concat(a); }catch(e){}
+  try{ var b=JSON.parse(localStorage.getItem('crks_eventos_admin')||'[]'); if(Array.isArray(b)) b.forEach(function(x){ if(!out.some(function(y){ return String(y.title||'').toLowerCase().trim()===String(x.title||'').toLowerCase().trim(); })) out.push(x); }); }catch(e){}
+  return out;
+}
+function crksV28Write(ev){
+  try{ var a=JSON.parse(localStorage.getItem('crks_eventos_v28')||'[]'); if(!Array.isArray(a)) a=[]; a.push(ev); localStorage.setItem('crks_eventos_v28',JSON.stringify(a)); }catch(e){}
+  try{ var b=JSON.parse(localStorage.getItem('crks_eventos_admin')||'[]'); if(!Array.isArray(b)) b=[]; b.push(ev); localStorage.setItem('crks_eventos_admin',JSON.stringify(b)); }catch(e){}
+}
+// Guardar V28: escribe en llave nueva + vieja + Supabase, y muestra el resultado real
+saveEventoAdmin=async function(){
+  if(typeof crksIsAdmin==='function'&&!crksIsAdmin())return alert('Solo la cuenta runcrackscolombia@gmail.com puede agregar eventos.');
+  var title=(document.getElementById('et')||{}).value||''; title=title.trim(); if(!title)return alert('Pon título');
+  var desc=(document.getElementById('ed')||{}).value||'';
+  var when=(document.getElementById('edt')||{}).value||'';
+  var place=(document.getElementById('ep')||{}).value||'';
+  var pricePre=(document.getElementById('eprice-pre')||{}).value||'';
+  var priceFull=(document.getElementById('eprice-full')||{}).value||'';
+  var preEnd=(document.getElementById('epre-end')||{}).value||'';
+  var priceOld=(document.getElementById('epr')||{}).value||'';
+  if(!pricePre&&priceOld)pricePre=priceOld;
+  if(!priceFull&&priceOld)priceFull=priceOld;
+  var priceDisplay=pricePre||priceOld||'';
+  var photo='';
+  var fe=document.getElementById('ephoto'); var file=fe&&fe.files&&fe.files[0]?fe.files[0]:null;
+  if(file){ try{ photo=await up(file); }catch(e){ photo=''; } if(!photo){ try{ photo=await crksFileToDataUrl(file); }catch(e){ photo=''; } } }
+  if(file&&!photo)return alert('No se pudo anexar la foto. Intenta con otra foto más liviana.');
+  var ev={title:title,desc:desc,when:when,place:place,price:priceDisplay,price_pre:pricePre,price_full:priceFull,pre_end:preEnd,img:photo,created_at:new Date().toISOString()};
+  crksV28Write(ev);
+  var priceNum=null; try{ var _pn=String(priceDisplay).replace(/[^0-9]/g,''); if(_pn) priceNum=parseInt(_pn,10); }catch(e){}
+  var errEvents=null, errPosts=null, okEvents=false, okPosts=false;
+  try{
+    var r1=await sb.from('events').insert({title:title,description:desc,starts_at:when?new Date(when).toISOString():null,place:place,price:(priceNum!==null?priceNum:priceDisplay),image_url:photo||null});
+    if(r1.error){ var r1b=await sb.from('events').insert({title:title,description:desc,starts_at:when?new Date(when).toISOString():null,place:place,price:(priceNum!==null?priceNum:null)}); if(r1b.error)errEvents=r1b.error; else okEvents=true; } else okEvents=true;
+  }catch(e){ errEvents=e; }
+  try{
+    var body='[EVENTO_CRKS] '+title+'\n'+desc+'\nLugar: '+place+'\nFecha: '+(when||'')+'\nPrecio: '+priceDisplay+'\nPreventa: '+(pricePre||'')+'\nPrecio normal: '+(priceFull||'')+'\nFin preventa: '+(preEnd||'');
+    var r2=await sb.from('posts').insert({user_id:me.id,sport:'Evento',body:body,km:0,minutes:0,image_url:photo||null});
+    if(r2.error){ var r2b=await sb.from('posts').insert({user_id:me.id,sport:'Evento',body:body,km:0,minutes:0}); if(r2b.error)errPosts=r2b.error; else okPosts=true; } else okPosts=true;
+  }catch(e){ errPosts=e; }
+  try{ localStorage.setItem('crks_v28_last_save', JSON.stringify({title:title, okEvents:okEvents, okPosts:okPosts, errEvents:errEvents?String(errEvents.message||errEvents):'', errPosts:errPosts?String(errPosts.message||errPosts):'', at:new Date().toISOString()})); }catch(e){}
+  if(okEvents||okPosts){
+    alert('Evento guardado ✅ "'+title+'"\n\nEn este celular: SÍ (llave V28)\nEn Supabase Events: '+(okEvents?'SÍ':'NO - '+(errEvents&&errEvents.message?errEvents.message:''))+'\nEn Supabase Posts: '+(okPosts?'SÍ':'NO - '+(errPosts&&errPosts.message?errPosts.message:''))+'\n\nAhora ve a Eventos. Ahí debe salir.');
+  } else {
+    alert('Evento guardado SOLO en este celular ⚠️ "'+title+'"\n\nEvents: '+(errEvents&&errEvents.message?errEvents.message:errEvents)+'\nPosts: '+(errPosts&&errPosts.message?errPosts.message:errPosts)+'\n\nEn Eventos de ESTE celular sí debe salir (llave V28). En otros celulares NO saldrá hasta pegar el SQL de permisos en Supabase.');
+  }
+  try{ tab='eventos'; }catch(e){}
+  render();
+};
+// Botón de prueba: escribe un evento de prueba en la llave V28 sin tocar Supabase, para probar que Eventos sí muestra
+async function crksV28Probar(){
+  if(typeof crksIsAdmin==='function'&&!crksIsAdmin())return alert('Solo Admin.');
+  crksV28Write({title:'PRUEBA V28 - Si ves esto, Eventos SÍ muestra',desc:'Este es un evento de prueba guardado solo en este celular. Si sale aquí, el mostrar funciona y el problema es Supabase.',when:new Date(Date.now()+86400000).toISOString().slice(0,16),place:'Prueba',price:'$1',price_pre:'$1',price_full:'$1',pre_end:'',img:'',created_at:new Date().toISOString()});
+  alert('Prueba guardada. Ahora ve a Eventos, debe salir "PRUEBA V28".');
+  try{ tab='eventos'; }catch(e){}
+  render();
+}
+// Eventos V28: lee PRIMERO la llave nueva (local), luego Supabase. Nunca borra nada al abrir.
+V.eventos=async function(){
+  var isAdm=(typeof crksIsAdmin==='function')?crksIsAdmin():false;
+  var mandalayDeleted=false; try{ mandalayDeleted=localStorage.getItem('crks_mandalay_deleted')==='1'; }catch(e){}
+  var localEvents=crksV28Read();
+  var sbEvents=[], sbErr=''; try{ var _re=await sb.from('events').select('*').order('created_at',{ascending:false}).limit(100); if(_re.error) sbErr=String(_re.error.message||_re.error); else if(_re.data) sbEvents=_re.data; }catch(e){ sbErr=String(e&&e.message?e.message:e); }
+  var postEvents=[], postErr=''; try{ var _rp=await sb.from('posts').select('id,body,image_url,created_at').order('created_at',{ascending:false}).limit(100); if(_rp.error) postErr=String(_rp.error.message||_rp.error); else if(_rp.data) postEvents=_rp.data.filter(function(p){ return (p.body||'').includes('[EVENTO_CRKS]'); }); }catch(e){ postErr=String(e&&e.message?e.message:e); }
+  function parsePostBody(body){
+    var lines=String(body||'').split('\n'); var title=lines[0].replace('[EVENTO_CRKS]','').trim(); var desc='',place='',when='',price='',pricePre='',priceFull='',preEnd='';
+    lines.forEach(function(l){ if(l.startsWith('Lugar:')) place=l.replace('Lugar:','').trim(); else if(l.startsWith('Fecha:')) when=l.replace('Fecha:','').trim(); else if(l.startsWith('Precio:')) price=l.replace('Precio:','').trim(); else if(l.startsWith('Preventa:')) pricePre=l.replace('Preventa:','').trim(); else if(l.startsWith('Precio normal:')) priceFull=l.replace('Precio normal:','').trim(); else if(l.startsWith('Fin preventa:')) preEnd=l.replace('Fin preventa:','').trim(); else if(!l.includes('[EVENTO_CRKS]')&&!l.startsWith('Lugar:')&&!l.startsWith('Fecha:')&&!l.startsWith('Precio:')&&!l.startsWith('Preventa:')&&!l.startsWith('Precio normal:')&&!l.startsWith('Fin preventa:')) desc+=l+' '; });
+    return {title:title,desc:desc.trim(),place:place,when:when,price:price,price_pre:pricePre,price_full:priceFull,pre_end:preEnd};
+  }
+  var seen={}; var allEvents=[];
+  // Local PRIMERO: si está en este celular, sale aunque Supabase falle
+  localEvents.forEach(function(r,i){ var key=String(r.title||'').toLowerCase().trim(); if(seen[key])return; seen[key]=1; allEvents.push({source:'local',localIdx:i,sbId:null,postId:null,title:r.title||'',desc:r.desc||r.description||'',place:r.place||'',when:r.when||r.starts_at||'',price:r.price||'',price_pre:r.price_pre||r.price||'',price_full:r.price_full||r.price||'',pre_end:r.pre_end||'',img:r.img||r.image_url||'',created_at:r.created_at||''}); });
+  sbEvents.forEach(function(r){ var key=String(r.title||'').toLowerCase().trim(); if(seen[key]){ var ex=allEvents.find(function(x){ return x.title.toLowerCase().trim()===key; }); if(ex&&!ex.sbId)ex.sbId=r.id; return; } seen[key]=1; allEvents.push({source:'supabase',sbId:r.id,postId:null,title:r.title||'',desc:r.description||r.desc||'',place:r.place||'',when:r.starts_at||r.when||'',price:r.price||'',price_pre:r.price_pre||r.price||'',price_full:r.price_full||r.price||'',pre_end:r.pre_end||'',img:r.image_url||r.img||'',created_at:r.created_at||''}); });
+  postEvents.forEach(function(p){ var parsed=parsePostBody(p.body||''); var key=parsed.title.toLowerCase().trim(); if(seen[key]){ var ex2=allEvents.find(function(x){ return x.title.toLowerCase().trim()===key; }); if(ex2){ if(!ex2.postId)ex2.postId=p.id; if(!ex2.img&&p.image_url)ex2.img=p.image_url; } return; } seen[key]=1; allEvents.push({source:'post',sbId:null,postId:p.id,title:parsed.title,desc:parsed.desc,place:parsed.place,when:parsed.when,price:parsed.price,price_pre:parsed.price_pre,price_full:parsed.price_full,pre_end:parsed.pre_end,img:p.image_url||'',created_at:p.created_at||''}); });
+  var mandalayFromList=allEvents.find(function(x){ return x.title.toLowerCase().includes('mandalay'); });
+  allEvents=allEvents.filter(function(x){ return !x.title.toLowerCase().includes('mandalay'); });
+  allEvents.sort(function(a,b){ var da=null,db=null; try{ if(a.when)da=new Date(a.when); if(isNaN(da))da=null; }catch(e){} try{ if(b.when)db=new Date(b.when); if(isNaN(db))db=null; }catch(e){} if(da&&db)return da-db; if(da&&!db)return -1; if(!da&&db)return 1; return 0; });
+  var mandalayEv={title:'Reto Mandalay',desc:'4 Horas de puro esfuerzo y luz de luna',place:'Mandalay',price:'$140.000',price_pre:'$140.000',price_full:'$160.000',pre_end:'2026-01-15',when:'2026-01-15T18:00:00',img:''};
+  if(mandalayFromList){ mandalayEv=mandalayFromList; if(!mandalayEv.price_pre)mandalayEv.price_pre='$140.000'; if(!mandalayEv.price_full)mandalayEv.price_full='$160.000'; if(!mandalayEv.pre_end)mandalayEv.pre_end='2026-01-15'; }
+  var mandalayHtml='';
+  if(!mandalayDeleted){
+    mandalayHtml='<div class=card style=border:2px solid #A6FF00;background:linear-gradient(180deg,#1a2a00,#111)><div style=background:#A6FF00;color:#000;padding:6px 10px;border-radius:99px;display:inline-block;font-weight:800;font-size:11px>EVENTO DESTACADO · OFICIAL CRKS</div><h2 style=margin:10px 0 4px>Reto Mandalay</h2><p><b>4 Horas de puro esfuerzo y luz de luna</b></p>'+(typeof crksEventoFechaBadge==='function'?crksEventoFechaBadge(mandalayEv):'')+(typeof crksEventoPreventaBadge==='function'?crksEventoPreventaBadge(mandalayEv):'')+(typeof crksEventoButtonsV18==='function'?crksEventoButtonsV18('Reto Mandalay',mandalayEv):'')+'<button class=g style="width:100%;margin-top:8px" onclick="crksShareEvento(\'Reto Mandalay\',\'4 Horas de puro esfuerzo y luz de luna\',\'Mandalay\',\'$140.000 hasta 15 de Enero, luego $160.000\',\'\',\'\')">📤 Compartir evento</button>'+(isAdm?'<button class=g style="width:100%;margin-top:8px;color:#ff6b6b" onclick="crksDeleteMandalay()">Borrar Reto Mandalay (Admin) 🗑️</button>':'')+'</div>';
+  } else if(isAdm){
+    mandalayHtml='<div class=card style=border:1px dashed #ff6b6b><b>Reto Mandalay borrado</b><p class=m style=margin:6px 0>Puedes restaurarlo desde Admin en Eventos.</p><button class=g onclick="crksRestoreMandalay()">Restaurar Reto Mandalay</button></div>';
+  }
+  var otros=allEvents.map(function(r){
+    var whenTxt=''; try{ if(r.when) whenTxt=new Date(r.when).toLocaleString('es-CO',{dateStyle:'medium',timeStyle:'short'}); }catch(e){ whenTxt=r.when||''; }
+    var delBtn=isAdm?'<button class=g style="margin-top:8px;color:#ff6b6b;width:100%" onclick="crksV28Delete(\''+esc(r.title).replace(/\'/g,"\\'")+'\',\''+(r.sbId||'')+'\',\''+(r.postId||'')+'\')">Borrar evento (Admin) 🗑️</button>':'';
+    var imgHtml=r.img?'<img loading="lazy" decoding="async" src="'+esc(r.img)+'" style="width:100%;max-height:280px;object-fit:cover;border-radius:12px;margin:8px 0">':'';
+    var shareBtn='<button class=g style="width:100%;margin-top:8px" onclick="crksShareEvento(\''+esc(r.title).replace(/\'/g,"\\'")+'\',\''+esc(r.desc||'').replace(/\'/g,"\\'")+'\',\''+esc(r.place||'').replace(/\'/g,"\\'")+'\',\''+esc(r.price||'').replace(/\'/g,"\\'")+'\',\''+esc(whenTxt).replace(/\'/g,"\\'")+'\',\''+esc(r.img||'').replace(/\'/g,"\\'")+'\')">📤 Compartir evento con foto</button>';
+    return '<div class=card style=border:2px solid #A6FF00><div style=background:#A6FF00;color:#000;padding:6px 10px;border-radius:99px;display:inline-block;font-weight:800;font-size:11px>EVENTO OFICIAL</div><h2 style=margin:10px 0 4px>'+esc(r.title)+'</h2>'+(typeof crksEventoFechaBadge==='function'?crksEventoFechaBadge(r):'')+imgHtml+'<p>'+esc(r.desc||'')+'</p>'+(typeof crksEventoPreventaBadge==='function'?crksEventoPreventaBadge(r):'')+(typeof crksEventoButtonsV18==='function'?crksEventoButtonsV18(r.title,r):'')+shareBtn+delBtn+'</div>';
+  }).join('');
+  var lastSave=''; try{ lastSave=localStorage.getItem('crks_v28_last_save')||''; }catch(e){}
+  var diag=isAdm?'<div class=card style=border:1px solid #A6FF00><b>👑 Diagnóstico Eventos V28</b><p class=m style=margin:6px 0;font-size:12px;line-height:1.6>En este celular (llave V28): <b>'+localEvents.length+'</b> · En Supabase Events: <b>'+sbEvents.length+'</b>'+(sbErr?' · Error Events: '+esc(sbErr):'')+' · En Supabase Posts evento: <b>'+postEvents.length+'</b>'+(postErr?' · Error Posts: '+esc(postErr):'')+'<br>Último guardado: '+(lastSave?esc(lastSave):'ninguno aún')+'</p><button class=g style=width:100% onclick="crksV28Probar()">Probar Eventos: guardar evento de prueba en este celular</button><p class=m style=margin:6px 0;font-size:12px>Si la prueba SÍ sale aquí, el mostrar funciona. Si un evento real NO sale en otro celular, es permiso RLS en Supabase.</p></div>':'';
+  var empty=allEvents.length?'':'<p class=m style=text-align:center>✨ Eventos limpio.<br>No hay eventos publicados. Publica el primero desde Admin.</p>';
+  return '<h2>Eventos</h2><p class=m>Eventos oficiales CRKS · Ordenados por fecha, el más próximo primero.<br>Separa tu cupo con el 50% o asegúralo con pago completo.</p>'+diag+mandalayHtml+'<h3 style=margin:16px 0 10px>Próximos eventos oficiales · En orden de fecha</h3>'+(otros||empty);
+};
+async function crksV28Delete(title, sbId, postId){
+  if(typeof crksIsAdmin==='function'&&!crksIsAdmin())return alert('Solo Admin.');
+  if(!confirm('¿Borrar el evento "'+title+'"?'))return;
+  try{ var a=JSON.parse(localStorage.getItem('crks_eventos_v28')||'[]'); localStorage.setItem('crks_eventos_v28',JSON.stringify(a.filter(function(x){ return String(x.title)!==String(title); }))); }catch(e){}
+  try{ var b=JSON.parse(localStorage.getItem('crks_eventos_admin')||'[]'); localStorage.setItem('crks_eventos_admin',JSON.stringify(b.filter(function(x){ return String(x.title)!==String(title); }))); }catch(e){}
+  if(sbId){ try{ await sb.from('events').delete().eq('id',sbId); }catch(e){} }
+  if(postId){ try{ await sb.from('posts').delete().eq('id',postId); }catch(e){} }
+  render();
+}
+</script>
 </body></html>
