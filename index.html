@@ -1884,4 +1884,68 @@ try{
   };
 }catch(e){}
 </script>
+
+<script>
+// === EVENTOS V27 - Guardado REAL para todos + Compartir directo a WhatsApp ===
+// 1) Compartir directo a la red (WhatsApp). Sin ventanita del sistema, sin copiar a mano.
+crksShareEvento=async function(title, desc, place, price, whenTxt, img){
+  var link='https://crks-team.vercel.app/';
+  var text='⚡ EVENTO OFICIAL CRKS ⚡\n\n'+(title||'')+'\n'+(desc||'')+'\n📍 '+(place||'')+(whenTxt?' · '+whenTxt:'')+'\n💰 '+(price||'Ver precio')+'\n\nSepara tu cupo con el 50% o asegúralo con pago completo.\nMíralo en la app: '+link+'\nEscríbenos: https://wa.me/573132019383';
+  try{ await navigator.clipboard.writeText(text); }catch(e){}
+  window.open('https://wa.me/?text='+encodeURIComponent(text),'_blank');
+};
+// 2) Guardar evento: mostrar el error REAL de Supabase, no decir que se publicó si no se guardó.
+saveEventoAdmin=async function(){
+  if(typeof crksIsAdmin==='function'&&!crksIsAdmin())return alert('Solo la cuenta runcrackscolombia@gmail.com puede agregar eventos.');
+  var title=(document.getElementById('et')||{}).value||''; title=title.trim(); if(!title)return alert('Pon título');
+  var desc=(document.getElementById('ed')||{}).value||'';
+  var when=(document.getElementById('edt')||{}).value||'';
+  var place=(document.getElementById('ep')||{}).value||'';
+  var pricePre=(document.getElementById('eprice-pre')||{}).value||'';
+  var priceFull=(document.getElementById('eprice-full')||{}).value||'';
+  var preEnd=(document.getElementById('epre-end')||{}).value||'';
+  var priceOld=(document.getElementById('epr')||{}).value||'';
+  if(!pricePre&&priceOld)pricePre=priceOld;
+  if(!priceFull&&priceOld)priceFull=priceOld;
+  var priceDisplay=pricePre||priceOld||'';
+  var photo='';
+  var fe=document.getElementById('ephoto'); var file=fe&&fe.files&&fe.files[0]?fe.files[0]:null;
+  if(file){ try{ photo=await up(file); }catch(e){ photo=''; } if(!photo){ try{ photo=await crksFileToDataUrl(file); }catch(e){ photo=''; } } }
+  if(file&&!photo)return alert('No se pudo anexar la foto. Intenta con otra foto más liviana.');
+  var local={title:title,desc:desc,when:when,place:place,price:priceDisplay,price_pre:pricePre,price_full:priceFull,pre_end:preEnd,img:photo,created_at:new Date().toISOString()};
+  try{ var arr=JSON.parse(localStorage.getItem('crks_eventos_admin')||'[]'); arr.push(local); localStorage.setItem('crks_eventos_admin',JSON.stringify(arr)); }catch(e){}
+  var errEvents=null, errPosts=null, okEvents=false, okPosts=false;
+  try{
+    var r1=await sb.from('events').insert({title:title,description:desc,starts_at:when?new Date(when).toISOString():null,place:place,price:priceDisplay,image_url:photo||null});
+    if(r1.error){ var r1b=await sb.from('events').insert({title:title,description:desc,starts_at:when?new Date(when).toISOString():null,place:place,price:priceDisplay}); if(r1b.error)errEvents=r1b.error; else okEvents=true; } else okEvents=true;
+  }catch(e){ errEvents=e; }
+  try{
+    var body='[EVENTO_CRKS] '+title+'\n'+desc+'\nLugar: '+place+'\nFecha: '+(when||'')+'\nPrecio: '+priceDisplay+'\nPreventa: '+(pricePre||'')+'\nPrecio normal: '+(priceFull||'')+'\nFin preventa: '+(preEnd||'');
+    var r2=await sb.from('posts').insert({user_id:me.id,sport:'Evento',body:body,km:0,minutes:0,image_url:photo||null});
+    if(r2.error){ var r2b=await sb.from('posts').insert({user_id:me.id,sport:'Evento',body:body,km:0,minutes:0}); if(r2b.error)errPosts=r2b.error; else okPosts=true; } else okPosts=true;
+  }catch(e){ errPosts=e; }
+  if(!okEvents&&!okPosts){
+    alert('NO se guardó en Supabase para todos. Solo quedó en tu celular.\n\nEvents: '+(errEvents&&errEvents.message?errEvents.message:errEvents)+'\nPosts: '+(errPosts&&errPosts.message?errPosts.message:errPosts)+'\n\nEsto es permiso RLS en Supabase. Pega el SQL que te dejé en el chat en Supabase > SQL Editor > Run, y vuelve a publicar.');
+  } else if(!okEvents||!okPosts){
+    alert('Evento publicado ✅ (por '+(okEvents?'tabla Events':'')+(okEvents&&okPosts?' + ':'')+(okPosts?'posts de evento':'')+'). Ya aparece en Eventos para todos.\n\nOjo: una de las dos tablas falló:\nEvents: '+(errEvents&&errEvents.message?errEvents.message:'OK')+'\nPosts: '+(errPosts&&errPosts.message?errPosts.message:'OK')+'\n\nSi en otro celular no aparece, pega el SQL de permisos en Supabase.');
+  } else {
+    alert('Evento publicado ✅ En Events + posts. Ya aparece en Eventos para todos.');
+  }
+  render();
+};
+// 3) Eventos: si Supabase devuelve 0, mostrar aviso claro para Admin (no quedarse en blanco sin saber por qué)
+try{
+  var _origEventosV27=V.eventos;
+  V.eventos=async function(){
+    var html=await _origEventosV27();
+    try{
+      var isAdm=(typeof crksIsAdmin==='function')?crksIsAdmin():false;
+      if(isAdm&&html.indexOf('No hay eventos publicados')>=0){
+        html=html.replace('No hay eventos publicados.', 'No hay eventos publicados.<br><br><b>¿Publicaste y no sale?</b> Es permiso RLS en Supabase: el evento quedó solo en tu celular. Pega el SQL de permisos en Supabase > SQL Editor > Run, y vuelve a publicar. El SQL está en el chat.');
+      }
+    }catch(e){}
+    return html;
+  };
+}catch(e){}
+</script>
 </body></html>
